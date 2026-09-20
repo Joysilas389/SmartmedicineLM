@@ -68,25 +68,91 @@ export async function streamToString(stream) {
 }
 
 export async function upstreamError(res, providerName) {
-  let detail = '';
+  let text = '';
   try {
-    const text = await res.text();
-    try {
-      const body = JSON.parse(text);
-      detail = body?.error?.message || body?.message || text;
-    } catch {
-      detail = text;
-    }
+    text = await res.text();
   } catch {
     /* ignore */
   }
+  return errorFromBody(res.status, text, providerName);
+}
+
+function errorDetail(text) {
+  try {
+    const body = JSON.parse(text);
+    return body?.error?.message || body?.message || text;
+  } catch {
+    return text;
+  }
+}
+
+export function errorFromBody(status, text, providerName) {
+  const detail = String(errorDetail(text) || 'no details').slice(0, 300).replace(/[.\s]+$/, '');
   const hint =
-    res.status === 401 || res.status === 403
+    status === 401 || status === 403
       ? ' Check the API key in your Vercel environment variables.'
-      : res.status === 404
+      : status === 404
       ? ' Check the model name in your Vercel environment variables.'
-      : res.status === 429
+      : status === 429
       ? ' The provider is rate-limiting requests; wait a moment and try again.'
       : '';
-  return new ProviderError(`${providerName} returned ${res.status}: ${String(detail).slice(0, 300)}.${hint}`, 502);
+  return new ProviderError(`${providerName} returned ${status}: ${detail}.${hint}`, 502);
+}
+
+/*
+ * Newer models reject some sampling parameters (e.g. `temperature` on recent
+ * Claude models, `max_tokens` on OpenAI reasoning models). Instead of hard-coding
+ * model lists, POST once; if the API answers 400 naming one of these parameters,
+ * drop or rename it, retry, and remember the adjustment for this model.
+ */
+const OPTIONAL_PARAMS = ['temperature', 'top_p', 'top_k'];
+const adjustments = new Map(); // model -> { drop: Set, rename: Map }
+
+function applyAdjustments(body) {
+  const adj = adjustments.get(body.model);
+  if (!adj) return body;
+  const out = { ...body };
+  for (const k of adj.drop) delete out[k];
+  for (const [from, to] of adj.rename)
+    if (from in out) {
+      out[to] = out[from];
+      delete out[from];
+    }
+  return out;
+}
+
+function learnFrom(body, detail) {
+  const msg = String(detail).toLowerCase();
+  const adj = adjustments.get(body.model) || { drop: new Set(), rename: new Map() };
+  if ('max_tokens' in body && msg.includes('max_tokens') && msg.includes('max_completion_tokens')) {
+    adj.rename.set('max_tokens', 'max_completion_tokens');
+  } else {
+    const key = OPTIONAL_PARAMS.find((k) => k in body && msg.includes(k));
+    if (!key) return false;
+    adj.drop.add(key);
+  }
+  adjustments.set(body.model, adj);
+  return true;
+}
+
+export async function postWithFallback(url, headers, body, providerName) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const sent = applyAdjustments(body);
+    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(sent) });
+    if (res.ok && res.body) return res;
+    if (res.status !== 400) throw await upstreamError(res, providerName);
+    let text = '';
+    try {
+      text = await res.text();
+    } catch {
+      /* ignore */
+    }
+    if (!learnFrom(sent, errorDetail(text))) throw errorFromBody(res.status, text, providerName);
+  }
+  throw new ProviderError(`${providerName} rejected the request parameters.`, 502);
+}
+
+/** Test helper. */
+export function _resetAdjustments() {
+  adjustments.clear();
 }

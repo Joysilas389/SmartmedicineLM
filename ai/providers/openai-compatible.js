@@ -1,4 +1,4 @@
-import { ProviderError, sseToText, streamToString, upstreamError } from './base.js';
+import { ProviderError, sseToText, streamToString, upstreamError, postWithFallback } from './base.js';
 
 /**
  * Works with any OpenAI-compatible Chat Completions API:
@@ -36,18 +36,12 @@ export function createOpenAICompatibleProvider(env) {
   async function stream({ system, messages, maxTokens = 4000, temperature = 0.4 }) {
     if (!apiKey && !/localhost|127\.0\.0\.1/.test(baseUrl))
       throw new ProviderError('OPENAI_API_KEY is not set.', 500);
-    const res = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: headers(),
-      body: JSON.stringify({
-        model,
-        stream: true,
-        temperature,
-        max_tokens: maxTokens,
-        messages: toOpenAI(system, messages),
-      }),
-    });
-    if (!res.ok || !res.body) throw await upstreamError(res, 'Model API');
+    const res = await postWithFallback(
+      `${baseUrl}/chat/completions`,
+      headers(),
+      { model, stream: true, temperature, max_tokens: maxTokens, messages: toOpenAI(system, messages) },
+      'Model API',
+    );
     return sseToText(res.body, (evt) => {
       if (evt.error) return `\n\n⚠️ Model error: ${evt.error.message || 'unknown error'}`;
       const choice = evt.choices?.[0];

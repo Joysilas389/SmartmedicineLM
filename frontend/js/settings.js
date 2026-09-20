@@ -52,7 +52,7 @@ export function renderSettings() {
       ${providerBox()}
       ${state.modelInfo?.accessCodeRequired ? row('setAccess', 'Access code', 'This deployment is protected. Enter the code set in APP_ACCESS_CODE.',
         `<input type="password" class="form-control form-control-sm" id="setAccess" value="${escapeHtml(s.accessCode)}" autocomplete="off">`) : ''}
-      ${row('setTemp', `Temperature <span class="text-body-secondary" id="tempVal">${s.temperature}</span>`, 'Lower is more precise; higher is more varied.',
+      ${row('setTemp', `Temperature <span class="text-body-secondary" id="tempVal">${s.temperature}</span>`, 'Lower is more precise; higher is more varied. Newer models manage this themselves and ignore it.',
         `<input type="range" class="form-range" style="max-width:220px" id="setTemp" min="0" max="1" step="0.1" value="${s.temperature}">`)}
     </section>
 

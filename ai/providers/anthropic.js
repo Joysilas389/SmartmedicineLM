@@ -1,4 +1,4 @@
-import { ProviderError, sseToText, streamToString, upstreamError } from './base.js';
+import { ProviderError, sseToText, streamToString, postWithFallback } from './base.js';
 
 export function createAnthropicProvider(env) {
   const apiKey = env.ANTHROPIC_API_KEY;
@@ -22,23 +22,12 @@ export function createAnthropicProvider(env) {
 
   async function stream({ system, messages, maxTokens = 4000, temperature = 0.4 }) {
     if (!apiKey) throw new ProviderError('ANTHROPIC_API_KEY is not set.', 500);
-    const res = await fetch(`${baseUrl}/v1/messages`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model,
-        system,
-        max_tokens: maxTokens,
-        temperature,
-        stream: true,
-        messages: toAnthropic(messages),
-      }),
-    });
-    if (!res.ok || !res.body) throw await upstreamError(res, 'Anthropic');
+    const res = await postWithFallback(
+      `${baseUrl}/v1/messages`,
+      { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      { model, system, max_tokens: maxTokens, temperature, stream: true, messages: toAnthropic(messages) },
+      'Anthropic',
+    );
     return sseToText(res.body, (evt) => {
       if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') return evt.delta.text;
       if (evt.type === 'message_delta' && evt.delta?.stop_reason === 'max_tokens')
