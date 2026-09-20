@@ -845,3 +845,5 @@ button.concept-chip { cursor: pointer; }
 .app-banner i { font-size: 1.2rem; color: var(--sm-amber); }
 body.has-banner { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
 body.has-banner .app-shell { height: auto; flex: 1; min-height: 0; padding-top: 0; }
+.chat-more { text-align: center; padding: 4px 0 8px; }
+.chat-more .btn-link { font-size: .8rem; color: var(--sm-muted); text-decoration: none; }

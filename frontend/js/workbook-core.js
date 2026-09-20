@@ -28,14 +28,17 @@ export const STORES_IN_WORKBOOK = SHEETS.map((s) => s.store);
 
 const PRIVATE_SETTINGS = ['accessCode'];
 
-function display(value, kind) {
+const PREVIEW = 1500; // long text is previewed here; the full text lives in the Record columns
+
+function display(value, kind, editable) {
   if (value == null || value === '') return null;
   if (kind === 'date') return typeof value === 'number' && value > 0 ? new Date(value) : null;
   if (kind === 'pct') return typeof value === 'number' ? Math.round(value * 1000) / 10 : null;
   if (kind === 'bool') return value ? 'yes' : 'no';
   if (typeof value === 'object') return JSON.stringify(value).slice(0, CELL);
   const s = String(value);
-  return s.length > CELL ? s.slice(0, CELL - 1) + '…' : s;
+  const limit = kind === 'long' && !editable ? PREVIEW : CELL;
+  return s.length > limit ? s.slice(0, limit - 1) + '…' : s;
 }
 
 function splitJson(obj) {
@@ -79,7 +82,7 @@ export function buildWorkbook(XLSX, data) {
     const parts = rows.map(splitJson);
     const nParts = Math.max(1, ...parts.map((p) => p.length));
     const header = [...def.cols.map((c) => c[0]), RECORD, ...Array.from({ length: nParts - 1 }, (_, i) => `Record part ${i + 2}`)];
-    const aoa = [header, ...rows.map((r, i) => [...def.cols.map(([, f, kind]) => display(r[f], kind)), ...parts[i]])];
+    const aoa = [header, ...rows.map((r, i) => [...def.cols.map(([, f, kind]) => display(r[f], kind, def.editable)), ...parts[i]])];
     const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true, dateNF: 'yyyy-mm-dd hh:mm' });
     ws['!cols'] = [...def.cols.map(([h, , kind]) => ({ wch: kind === 'long' ? 60 : kind === 'date' ? 17 : Math.max(10, h.length + 2) })), ...Array.from({ length: nParts }, () => ({ wch: 12 }))];
     XLSX.utils.book_append_sheet(wb, ws, def.sheet);

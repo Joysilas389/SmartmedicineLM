@@ -131,8 +131,15 @@ export async function loadChats() {
   renderChatList();
 }
 
+const CHAT_PAGE = 60;
+let chatListLimit = CHAT_PAGE;
+
 export function renderChatList() {
   const q = els.search.value.trim().toLowerCase();
+  if (q !== renderChatList.lastQuery) {
+    chatListLimit = CHAT_PAGE;
+    renderChatList.lastQuery = q;
+  }
   const chats = state.chats
     .filter((c) => (state.showArchived ? c.archived : !c.archived))
     .filter((c) => !q || c.title.toLowerCase().includes(q))
@@ -141,7 +148,8 @@ export function renderChatList() {
     els.list.innerHTML = `<li class="chat-list-empty">${q ? 'No chats match your search.' : state.showArchived ? 'No archived chats.' : 'Your chats will appear here.'}</li>`;
     return;
   }
-  els.list.innerHTML = chats
+  const shown = chats.slice(0, chatListLimit);
+  els.list.innerHTML = shown
     .map(
       (c) => `<li class="chat-item${c.id === state.currentChatId ? ' active' : ''}" data-id="${c.id}">
       <a href="#/chat/${c.id}" title="${escapeHtml(c.title)}">${c.favorite ? '<i class="bi bi-star-fill"></i>' : ''}${escapeHtml(c.title)}</a>
@@ -158,9 +166,19 @@ export function renderChatList() {
       </div></li>`
     )
     .join('');
+  if (chats.length > shown.length)
+    els.list.insertAdjacentHTML(
+      'beforeend',
+      `<li class="chat-more"><button type="button" class="btn btn-sm btn-link" id="moreChats">Show ${Math.min(CHAT_PAGE, chats.length - shown.length)} more of ${chats.length}</button></li>`
+    );
 }
 
 function onChatListClick(e) {
+  if (e.target.closest('#moreChats')) {
+    chatListLimit += CHAT_PAGE;
+    renderChatList();
+    return;
+  }
   const act = e.target.closest('[data-act]');
   if (act) {
     const id = act.closest('.chat-item').dataset.id;

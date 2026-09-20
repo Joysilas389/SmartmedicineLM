@@ -13,6 +13,8 @@ import { buildWorkbook, parseWorkbook, STORES_IN_WORKBOOK } from './workbook-cor
 const XLSX_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const WORKBOOK_NAME = 'SmartMedicineLM.xlsx';
 const AUTOSAVE_DELAY = 15000;
+const AUTOSAVE_MAX = 300000; // with a large library, save less often (but always on tab hide)
+let lastBuildMs = 0;
 
 export const localFiles = { kind: 'none', label: '', lastSaved: null, saving: false, error: '', dirty: 0, folderName: '' };
 let target = null; // { kind: 'folder', dir } | { kind: 'local' }
@@ -246,7 +248,9 @@ export async function saveNow() {
   emit();
   savingPromise = (async () => {
     try {
+      const started = performance.now();
       const blob = await exportWorkbook({ includeFiles: false }); // originals are copied separately
+      lastBuildMs = performance.now() - started;
       if (target.kind === 'folder') await writeFolder(target.dir, blob);
       else await writeLocalServer(blob);
       await markSaved();
@@ -276,7 +280,8 @@ function scheduleSave() {
   emit();
   if (!target) return;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(saveNow, AUTOSAVE_DELAY);
+  // Small library: a few seconds. Large one: wait longer, because each save rewrites the file.
+  saveTimer = setTimeout(saveNow, Math.min(AUTOSAVE_MAX, Math.max(AUTOSAVE_DELAY, lastBuildMs * 20)));
 }
 
 /* ------------------------------ start-up ------------------------------ */
