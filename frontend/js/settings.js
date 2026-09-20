@@ -1,4 +1,7 @@
 /* Settings (spec §67) and the roadmap page for Phase 2 sections (spec §72). */
+import { accountSectionHtml, accountAction } from './account.js';
+import { semanticStatus } from './embeddings.js';
+import { dataSectionHtml, dataAction } from './data-ui.js';
 import { state, saveSettings, resetSettings, POLICY_TOGGLES } from './state.js';
 import { db } from './store.js';
 import { $, escapeHtml, toast, confirmDialog } from './ui.js';
@@ -44,8 +47,12 @@ export function renderSettings() {
   page.innerHTML = `
     <div class="page-head"><div>
       <h2 class="page-title">Settings</h2>
-      <p class="page-sub">These control the teaching engine directly. They are stored on this device.</p>
+      <p class="page-sub">These control the teaching engine directly.${state.account?.user ? ' They sync with your account.' : ' They are stored on this device.'}</p>
     </div></div>
+
+    ${dataSectionHtml()}
+
+    ${accountSectionHtml()}
 
     <section class="settings-section">
       <h3>AI model</h3>
@@ -72,6 +79,15 @@ export function renderSettings() {
         select('setKnow', s.knowledgeMode, [['library', 'My library (source-locked)'], ['hybrid', 'Hybrid'], ['general', 'General knowledge']]))}
       ${row('setK', 'Passages per answer', 'How many retrieved passages are sent to the model.',
         select('setK', s.retrievalK, [[4, '4'], [6, '6'], [8, '8'], [10, '10'], [12, '12']]))}
+      ${row('setSem', 'Semantic search', 'Finds passages by meaning as well as by words (e.g. “why do the ankles swell” finds text about oncotic pressure). Downloads a 23 MB model once, then works offline in this browser.',
+        toggle('setSem', s.semanticSearch))}
+      <div class="small text-body-secondary mt-1" id="semStatus">${escapeHtml(semanticStatus())}</div>
+    </section>
+
+    <section class="settings-section">
+      <h3>Spaced repetition</h3>
+      ${row('setSched', 'Scheduler', 'FSRS models each card’s difficulty and memory stability; SM-2 is the classic Anki-style algorithm.',
+        select('setSched', s.scheduler, [['fsrs', 'FSRS (recommended)'], ['sm2', 'SM-2']]))}
     </section>
 
     <section class="settings-section">
@@ -81,7 +97,7 @@ export function renderSettings() {
 
     <section class="settings-section">
       <h3>Data on this device</h3>
-      <p class="small text-body-secondary">Chats, documents and flashcards are stored in this browser only (Phase 1). Clearing browser data removes them.</p>
+      <p class="small text-body-secondary">${state.account?.user ? 'Everything is kept in this browser and synced to your account.' : 'Chats, documents, flashcards, questions and progress are stored in this browser. Clearing browser data removes them.'}</p>
       <div class="d-flex flex-wrap gap-2">
         <button class="btn btn-outline-secondary btn-sm" id="resetSettings" type="button"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset settings</button>
         <button class="btn btn-outline-danger btn-sm" id="wipeData" type="button"><i class="bi bi-trash me-1"></i>Delete all local data</button>
@@ -104,6 +120,14 @@ export function renderSettings() {
   on('setGhana', 'change', (e) => saveSettings({ ghanaContext: e.target.checked }));
   on('setKnow', 'change', (e) => saveSettings({ knowledgeMode: e.target.value }));
   on('setK', 'change', (e) => saveSettings({ retrievalK: Number(e.target.value) }));
+  on('setSem', 'change', (e) => {
+    saveSettings({ semanticSearch: e.target.checked });
+    document.dispatchEvent(new CustomEvent('semantic:toggle'));
+  });
+  page.querySelectorAll('[data-acct]').forEach((b) => b.addEventListener('click', () => accountAction(b.dataset.acct, renderSettings)));
+  page.querySelectorAll('[data-data]').forEach((b) => b.addEventListener('click', () => dataAction(b.dataset.data, renderSettings)));
+  page.querySelector('#restoreFile')?.addEventListener('change', (e) => dataAction('restore', renderSettings, e.target.files?.[0]));
+  on('setSched', 'change', (e) => saveSettings({ scheduler: e.target.value }));
   on('setTheme', 'change', (e) => {
     saveSettings({ theme: e.target.value });
     applyTheme();
@@ -118,44 +142,10 @@ export function renderSettings() {
     toast('Settings reset.');
   });
   on('wipeData', 'click', async () => {
-    if (!(await confirmDialog('Delete all local data?', 'This permanently removes every chat, document and flashcard stored in this browser.'))) return;
+    if (!(await confirmDialog('Delete all local data?', 'This permanently removes every chat, document, flashcard, question and all progress data stored in this browser.'))) return;
     await db.wipe();
     invalidateIndex();
     location.hash = '#/chat';
     location.reload();
   });
-}
-
-const ROADMAP = {
-  questions: {
-    title: 'Questions', icon: 'bi-ui-checks',
-    lead: 'A USMLE-style question engine built on the same teaching controller.',
-    items: ['Tutor, timed-block and exam modes with navigation and marking', 'Why the right answer is right, and why every distractor is wrong', 'What finding would make each distractor correct', 'Error classification (mechanism gap, misread clue, distractor trap…)', 'Missed questions become flashcards automatically'],
-    now: 'Today you can type “Test me on …” in chat, or use “Generate questions” on any page in the viewer.',
-  },
-  progress: {
-    title: 'Progress', icon: 'bi-graph-up',
-    lead: 'A learner model that tracks understanding, recall and application separately.',
-    items: ['Per-system mastery split into understanding / recall / application', 'Weakness map with prerequisite bottlenecks', 'Study plans built from your exam date and hours per day', 'Review forecast from the spaced-repetition scheduler'],
-    now: 'Your flashcard review history is already being recorded for this.',
-  },
-  knowledge: {
-    title: 'Knowledge', icon: 'bi-diagram-3',
-    lead: 'A medical knowledge graph compiled from your library.',
-    items: ['Concepts linked by causes, inhibits, presents with, treated by…', 'Prerequisite detection before each lesson', 'Mechanisms and clinical findings extracted from each source section', 'Source comparison across documents'],
-    now: 'Detected topics already appear on each document in the Library.',
-  },
-};
-
-export function renderSoon(key) {
-  const r = ROADMAP[key] || ROADMAP.questions;
-  $('#soonPage').innerHTML = `
-    <div class="page-head"><div>
-      <h2 class="page-title"><i class="bi ${r.icon} me-2"></i>${r.title}</h2>
-      <p class="page-sub">${r.lead}</p>
-    </div></div>
-    <span class="badge text-bg-secondary mb-2">Phase 2</span>
-    <ul class="roadmap">${r.items.map((i) => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
-    <div class="alert alert-light border mt-4 mb-0"><i class="bi bi-lightbulb me-2"></i>${escapeHtml(r.now)}</div>`;
-  return r.title;
 }

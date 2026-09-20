@@ -1,6 +1,7 @@
 import { getProvider } from '../ai/providers/index.js';
 import { buildTeachingRequest } from '../ai/teacher/controller.js';
 import { json, checkAccess } from './_http.js';
+import { requireUser } from './_auth.js';
 
 export const config = { runtime: 'edge' };
 
@@ -10,6 +11,8 @@ export default async function handler(req) {
   if (req.method !== 'POST') return json({ error: 'Use POST.' }, 405);
   const denied = checkAccess(req);
   if (denied) return denied;
+  const auth = await requireUser(req);
+  if (auth.denied) return auth.denied;
 
   const len = Number(req.headers.get('content-length') || 0);
   if (len > MAX_BODY_BYTES) return json({ error: 'Request is too large. Attach fewer or smaller images.' }, 413);

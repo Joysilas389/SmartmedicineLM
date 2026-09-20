@@ -20,7 +20,7 @@ export const DEFAULT_POLICY = Object.freeze({
   ghana_context: false,
 });
 
-export const MODES = ['learn', 'review', 'recall', 'concise', 'standard', 'image', 'continue'];
+export const MODES = ['learn', 'review', 'recall', 'concise', 'standard', 'image', 'image_quiz', 'image_eval', 'continue'];
 export const DEPTHS = ['quick', 'standard', 'deep', 'comprehensive'];
 export const KNOWLEDGE_MODES = ['hybrid', 'library', 'general'];
 
@@ -45,6 +45,9 @@ export function detectIntent(text = '', hasImages = false) {
 
 /** Combines the learner's explicit mode choice with the detected intent. */
 export function resolveMode(controls = {}, text = '', hasImages = false) {
+  // Image practice (Phase 3): the learner reads the image first, then is evaluated.
+  if (hasImages && controls.imageTask === 'quiz') return 'image_quiz';
+  if (!hasImages && controls.imageEval === true && !/^(please )?(continue|carry on)\b/i.test(text.trim())) return 'image_eval';
   const chosen = String(controls.mode || 'auto').toLowerCase();
   if (chosen !== 'auto' && MODES.includes(chosen)) return chosen;
   return detectIntent(text, hasImages);
@@ -64,6 +67,8 @@ const TOKEN_BUDGET = {
   recall: { quick: 1000, standard: 1500, deep: 2500, comprehensive: 3000 },
   standard: { quick: 1500, standard: 3000, deep: 6000, comprehensive: 9000 },
   image: { quick: 1500, standard: 3000, deep: 6000, comprehensive: 9000 },
+  image_quiz: { quick: 600, standard: 800, deep: 800, comprehensive: 1000 },
+  image_eval: { quick: 2500, standard: 4000, deep: 6000, comprehensive: 8000 },
   learn: { quick: 5000, standard: 8000, deep: 12000, comprehensive: 16000 },
   continue: { quick: 8000, standard: 8000, deep: 12000, comprehensive: 16000 },
 };
@@ -73,7 +78,7 @@ export function maxTokensFor(mode, depth) {
   return (TOKEN_BUDGET[mode] || TOKEN_BUDGET.standard)[d];
 }
 
-function modeInstructions(mode, depth, policy) {
+function modeInstructions(mode, depth, policy, imageKind = 'auto') {
   const depthLine = {
     quick: 'Keep it tight: the essentials only.',
     standard: 'Moderate length.',
@@ -97,6 +102,10 @@ Ask 3–5 questions of increasing difficulty (comprehension, application with a 
 When the learner answers in a later turn, evaluate each answer with these headings: What you got right · What you missed · The mechanism · Correction · Memory anchor. Then classify any error as one of: knowledge gap, mechanism gap, recognition failure, misread clue, differential confusion, calculation error, distractor trap, recall failure.`;
     case 'concise':
       return `MODE: DIRECT ANSWER. The learner asked a focused question. Answer it directly in a short paragraph or a small chain block (under about 250 words). Still explain WHY in one or two sentences. Do not produce a full lesson; offer at the end, in one line, to teach it from zero.`;
+    case 'image_quiz':
+      return M.imagePracticeInstructions(imageKind);
+    case 'image_eval':
+      return M.IMAGE_EVALUATION;
     case 'image':
       return `MODE: EXPLAIN AN IMAGE. ${depthLine}
 First describe what the image shows (type of image, text, labels, arrows, structures, graphs, tables). Then preserve the relationships you can see as a chain (arrow A → structure B → process C → clinical finding D). Then teach the underlying concept from zero using plain language, and finish with what an examiner would want you to notice. If the image is not clear enough to interpret, say what is uncertain rather than guessing.`;
@@ -130,6 +139,16 @@ function sourceInstructions(knowledgeMode, sources, policy) {
 
 function escapeAttr(s = '') {
   return String(s).replace(/"/g, "'").slice(0, 160);
+}
+
+/** Validates the prerequisite plan the browser computed from the learner model. */
+export function preparePrerequisites(raw) {
+  if (!raw || typeof raw !== 'object' || typeof raw.concept !== 'string') return null;
+  const items = (Array.isArray(raw.items) ? raw.items : [])
+    .filter((i) => i && typeof i.name === 'string' && ['teach', 'review', 'skip'].includes(i.decision))
+    .slice(0, 10)
+    .map((i) => ({ name: i.name.replace(/[\n\r"]/g, ' ').trim().slice(0, 80), decision: i.decision }));
+  return items.length ? { concept: raw.concept.replace(/[\n\r"]/g, ' ').trim().slice(0, 80), items } : null;
 }
 
 /** Normalises and caps the sources the browser sent. */
@@ -170,24 +189,31 @@ export function buildTeachingRequest(body = {}) {
   const policy = resolvePolicy(controls.policy);
   const sources = knowledgeMode === 'general' ? [] : prepareSources(body.sources);
 
-  if (knowledgeMode === 'library' && !sources.length && !hasImages) {
+  if (knowledgeMode === 'library' && !sources.length && !hasImages && mode !== 'image_eval') {
     return { refusal: SOURCE_LOCKED_MESSAGE, mode, depth };
   }
 
   const parts = [M.IDENTITY, M.FORMAT];
-  if (policy.mermaid_diagrams && mode !== 'concise' && mode !== 'recall') parts.push(M.MERMAID);
+  if (policy.mermaid_diagrams && !['concise', 'recall', 'image_quiz'].includes(mode)) parts.push(M.MERMAID);
   if (policy.plain_language_first) parts.push(M.PLAIN_LANGUAGE);
   if (policy.problem_first && (mode === 'learn' || mode === 'image')) parts.push(M.PROBLEM_FIRST);
   if (policy.mechanism_first) parts.push(M.MECHANISM);
   parts.push(M.COMMIT);
   if (policy.spatial_anchor && ['learn', 'standard', 'image'].includes(mode)) parts.push(M.SPATIAL_ANCHOR);
-  if (policy.step1_high_yield && mode !== 'recall') parts.push(M.STEP1);
+  if (policy.step1_high_yield && !['recall', 'image_quiz'].includes(mode)) parts.push(M.STEP1);
   const wantsCards = /flash ?cards?/i.test(last.content);
   if (wantsCards || (policy.flashcards && (mode === 'learn' || (mode === 'standard' && depth === 'comprehensive')))) parts.push(M.FLASHCARDS);
   if (policy.active_recall && mode === 'learn') parts.push(M.ACTIVE_RECALL_END);
   if (policy.ghana_context) parts.push(M.GHANA);
   parts.push(M.SAFETY);
-  parts.push(modeInstructions(mode, depth, policy));
+  const imageKind = M.IMAGE_KINDS.includes(controls.imageKind) ? controls.imageKind : 'auto';
+  const imageTurn = mode === 'image' || mode === 'image_quiz' || mode === 'image_eval' || (hasImages && mode !== 'continue');
+  if (imageTurn && mode !== 'image_quiz') parts.push(M.imageInstructions(imageKind));
+  if (imageTurn) parts.push(M.IMAGE_SAFETY);
+  parts.push(modeInstructions(mode, depth, policy, imageKind));
+  const prereq = M.prerequisiteInstructions(preparePrerequisites(body.prerequisites), mode);
+  if (prereq && !['continue', 'recall', 'image_quiz', 'image_eval'].includes(mode)) parts.push(prereq);
+  if (mode === 'learn' || (mode === 'standard' && (depth === 'deep' || depth === 'comprehensive'))) parts.push(M.CONCEPTS);
   parts.push(sourceInstructions(knowledgeMode, sources, policy));
 
   const temperature = clamp(Number(controls.temperature ?? 0.4), 0, 1);
@@ -235,9 +261,16 @@ export function sanitizeMessages(raw) {
     else out.push(msg);
   }
   while (out.length && out[0].role !== 'user') out.shift();
-  // Only the latest user turn keeps its images, to keep requests small.
-  out.forEach((m, i) => {
-    if (i !== out.length - 1) delete m.images;
-  });
+  // Only the most recent user turn that carries images keeps them (so an image-practice
+  // answer can still be checked against the image), to keep requests small.
+  let kept = false;
+  for (let i = out.length - 1; i >= 0; i--) {
+    if (!out[i].images?.length) {
+      delete out[i].images;
+      continue;
+    }
+    if (kept) delete out[i].images;
+    kept = true;
+  }
   return out;
 }

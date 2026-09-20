@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS chunks (
   heading_path  text[] NOT NULL DEFAULT '{}',
   content       text NOT NULL,
   token_count   int,
-  embedding     vector(1536),                 -- adjust to the embedding model's dimension
+  embedding     vector(384),                 -- adjust to the embedding model's dimension
   tsv           tsvector GENERATED ALWAYS AS (to_tsvector('english', content)) STORED,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS concepts (
   system        text,                         -- cardiovascular, renal…
   kind          text,                         -- disease, mechanism, drug, finding, test…
   synonyms      text[] NOT NULL DEFAULT '{}',
-  embedding     vector(1536)
+  embedding     vector(384)
 );
 CREATE INDEX IF NOT EXISTS concepts_trgm_idx ON concepts USING gin (name gin_trgm_ops);
 
@@ -204,7 +204,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 -- Hybrid retrieval helper: vector similarity blended with full-text rank.
 CREATE OR REPLACE FUNCTION match_chunks(
-  query_embedding vector(1536), query_text text, p_user uuid,
+  query_embedding vector(384), query_text text, p_user uuid,
   p_docs uuid[] DEFAULT NULL, p_k int DEFAULT 8)
 RETURNS TABLE (chunk_id uuid, document_id uuid, page_start int, content text, score real)
 LANGUAGE sql STABLE AS $$
@@ -217,3 +217,9 @@ LANGUAGE sql STABLE AS $$
   ORDER BY score DESC
   LIMIT p_k;
 $$;
+
+-- ------------------------------------------------------------------ Phase 2 additions
+-- The statements in migrations/002_phase2.sql (FSRS state, question blocks, spec §27 error
+-- taxonomy, full spec §28 learner model, learned-graph provenance) apply on top of the tables
+-- above. Run: psql "$DATABASE_URL" -f database/migrations/001_initial.sql -f database/migrations/002_phase2.sql
+

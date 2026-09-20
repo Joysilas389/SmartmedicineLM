@@ -4,6 +4,7 @@ import { db } from './store.js';
 import { $, $$, escapeHtml, formatBytes, formatDate, toast, confirmDialog, promptDialog, uid } from './ui.js';
 import { ingestFile, validateFile } from './ingestion.js';
 import { invalidateIndex } from './retrieval.js';
+import { scheduleIndexing, removeDocumentVectors } from './embeddings.js';
 import { composeAndSend, startNewChat, prefill } from './chat.js';
 
 let filter = 'all';
@@ -96,6 +97,7 @@ export async function uploadFiles(files, { onProgress } = {}) {
       progress.delete(doc.id);
       Object.assign(state.documents.find((x) => x.id === doc.id) || {}, doc);
       invalidateIndex();
+      scheduleIndexing();
       done.push(doc);
       if (doc.status === 'needs-ocr')
         toast(`${doc.title} has no selectable text (probably a scan). You can view it, but text search needs OCR, which is coming in a later phase.`, 'warning', 8000);
@@ -202,6 +204,7 @@ async function onListClick(e) {
 
 export async function deleteDocument(id) {
   await db.delByIndex('chunks', 'docId', id);
+  await removeDocumentVectors(id);
   await db.del('files', id);
   await db.del('documents', id);
   state.documents = state.documents.filter((d) => d.id !== id);

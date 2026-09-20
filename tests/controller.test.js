@@ -52,8 +52,17 @@ test('message sanitising', () => {
     { role: 'user', content: 'c', images: [{ mediaType: 'text/html', data: 'x' }] },
   ]);
   assert.equal(m[0].role, 'user');
-  assert.equal(m.at(-1).images.length, 0);
-  assert.equal(m[0].images, undefined);
+  assert.ok(!m.at(-1).images?.length, 'invalid image types are dropped');
+  assert.equal(m[0].images.length, 1, 'the most recent valid image stays so an image-practice answer can be checked');
+  const two = sanitizeMessages([
+    { role: 'user', content: 'first', images: [{ mediaType: 'image/png', data: 'AAAA' }] },
+    { role: 'assistant', content: 'x' },
+    { role: 'user', content: 'second', images: [{ mediaType: 'image/jpeg', data: 'BBBB' }] },
+    { role: 'assistant', content: 'y' },
+    { role: 'user', content: 'my reading' },
+  ]);
+  assert.equal(two[0].images, undefined, 'older images are dropped to keep requests small');
+  assert.equal(two[2].images[0].data, 'BBBB');
 });
 
 test('demo provider streams when no key is set', async () => {

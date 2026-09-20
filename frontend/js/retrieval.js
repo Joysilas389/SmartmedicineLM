@@ -1,10 +1,19 @@
 /*
- * Retrieval, Phase 1: lexical BM25 over the learner's chunks, with light stemming and
- * medical synonym expansion, run in the browser. The interface (search(query, opts) →
- * ranked chunks with provenance) is what the pgvector/hybrid retriever will implement
- * server-side later, so callers don't change.
+ * Retrieval: hybrid search over the learner's chunks, run in the browser.
+ *   - lexical BM25 with light stemming and medical synonym expansion
+ *   - semantic vector search (embeddings.js), when enabled and ready
+ * fused with Reciprocal Rank Fusion. The interface (search(query, opts) → ranked chunks
+ * with provenance) stays the same whichever signals are available.
  */
 import { db } from './store.js';
+import { vectorSearch } from './embeddings.js';
+
+/** Reciprocal Rank Fusion: merges ranked id lists; items high in several lists win. */
+export function rrf(lists, k = 60) {
+  const score = new Map();
+  for (const list of lists) list.forEach((id, rank) => score.set(id, (score.get(id) || 0) + 1 / (k + rank + 1)));
+  return [...score.entries()].sort((a, b) => b[1] - a[1]).map(([id, s]) => ({ id, score: s }));
+}
 
 const STOP = new Set(
   'a an and are as at be been but by can could did do does for from had has have how i if in into is it its me my of on or our please should so tell than that the their them then there these they this to was we were what when where which while who why will with would you your about explain teach give show from zero absolute scratch review minute minutes quick test quiz know nothing understand simple simply like also more most very some any each other such only own same just now'.split(' ')
@@ -124,10 +133,21 @@ export async function search(query, { docIds = null, k = 6, pinned = null, minSc
 
   scored.sort((a, b2) => b2.score - a.score);
 
+  // Semantic signal: fuse the BM25 ranking with the vector ranking.
+  let ranked = scored;
+  const semantic = await vectorSearch(query, { docIds, k: 40 }).catch(() => null);
+  if (semantic?.length) {
+    const byId = new Map(scored.map((r) => [r.chunk.id, r]));
+    const fused = rrf([scored.slice(0, 40).map((r) => r.chunk.id), semantic.map((r) => r.id)]);
+    ranked = fused
+      .map(({ id, score }) => (byId.get(id) ? { ...byId.get(id), score } : idx.docs.get(id) ? { chunk: idx.docs.get(id).chunk, score } : null))
+      .filter((r) => r && (!allowed || allowed.has(r.chunk.docId)));
+  }
+
   // Diversity: at most 2 chunks per page so one page doesn't crowd out the rest.
   const perPage = new Map();
   const results = [];
-  for (const r of scored) {
+  for (const r of ranked) {
     const key = `${r.chunk.docId}:${r.chunk.page}`;
     if ((perPage.get(key) || 0) >= 2) continue;
     perPage.set(key, (perPage.get(key) || 0) + 1);

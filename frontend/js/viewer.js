@@ -87,6 +87,13 @@ export async function openViewer(docId, page = 1) {
     cur.page = 1;
     if (cur.imgUrl) URL.revokeObjectURL(cur.imgUrl);
     const rec = await db.get('files', docId);
+    if (!rec) {
+      cur.imgUrl = null;
+      stage.innerHTML = `<div class="empty-block"><i class="bi bi-phone"></i><p class="mb-1 fw-semibold">This image is on another device</p><p class="mb-0">It was uploaded on a different device and synced without the image file. Upload it again here to view it.</p></div>`;
+      $('#thumbs').innerHTML = '';
+      updatePager();
+      return;
+    }
     cur.imgUrl = URL.createObjectURL(rec.blob);
     stage.innerHTML = `<img src="${cur.imgUrl}" alt="${escapeHtml(doc.title)}">`;
     $('#thumbs').innerHTML = '';
@@ -94,13 +101,16 @@ export async function openViewer(docId, page = 1) {
     return;
   }
 
-  if (doc.fileType !== 'pdf') {
-    // Text/DOCX documents: show extracted text by pseudo-page.
+  const missingOriginal = doc.fileType === 'pdf' && !(await db.get('files', docId));
+  if (doc.fileType !== 'pdf' || missingOriginal) {
+    // Text/DOCX documents (and PDFs synced from another device): show extracted text by page.
     cur.pdf = null;
     cur.total = doc.pageCount || 1;
     cur.page = clamp(page, 1, cur.total);
     $('#thumbs').innerHTML = '';
     await renderTextPage();
+    if (missingOriginal)
+      stage.insertAdjacentHTML('afterbegin', `<div class="note-box small mb-2"><i class="bi bi-phone me-1"></i>Showing the extracted text. The original PDF is on the device it was uploaded from; upload it here too to see the pages.</div>`);
     return;
   }
 

@@ -40,7 +40,7 @@ const CALLOUTS = {
  * Returns { citedTags } for the citation validator.
  */
 const TRUNC_RE = /\n*(\[\[SM:TRUNCATED\]\]|> \[!NOTE\]\n> This answer reached the length limit\.[^\n]*)\s*$/;
-const SPECIAL_BLOCKS = ['mermaid', 'chain', 'flashcards'];
+const SPECIAL_BLOCKS = ['mermaid', 'chain', 'flashcards', 'concepts'];
 
 /**
  * Handles answers cut off by the model's output limit: removes the marker, and
@@ -76,7 +76,8 @@ export async function renderMessage(el, raw, { final = false, sources = [] } = {
   for (const code of el.querySelectorAll('pre > code')) {
     const lang = (code.className.match(/language-([\w-]+)/) || [])[1];
     const pre = code.parentElement;
-    if (lang === 'chain') pre.replaceWith(buildChain(code.textContent));
+    if (lang === 'concepts') pre.remove(); // machine-readable knowledge-graph block, not for display
+    else if (lang === 'chain') pre.replaceWith(buildChain(code.textContent));
     else if (lang === 'flashcards') pre.replaceWith(final ? buildDeck(code.textContent) : pending('Building flashcards…'));
     else if (lang === 'mermaid') {
       if (!final) pre.replaceWith(pending('Drawing diagram…'));
@@ -88,7 +89,7 @@ export async function renderMessage(el, raw, { final = false, sources = [] } = {
     }
   }
   const citedTags = enhanceCitations(el, sources);
-  if (final && truncated) {
+  if (final && truncated && cutBlock !== 'concepts') {
     const what = { mermaid: 'a diagram', chain: 'a causal chain', flashcards: 'the flashcards' }[cutBlock];
     const box = document.createElement('div');
     box.className = 'callout callout-note truncated-note';
@@ -148,22 +149,58 @@ export function parseChain(src) {
     });
 }
 
+/**
+ * Interactive causal chain (spec §73 interactive diagrams): tap a step to ask why it
+ * follows from the one before; "Test me" hides the steps so the learner rebuilds the
+ * chain from memory, revealing one step at a time.
+ */
 function buildChain(src) {
+  const steps = parseChain(src);
+  const outer = document.createElement('div');
+  outer.className = 'chain-wrap';
+  const tools = document.createElement('div');
+  tools.className = 'chain-tools';
+  tools.innerHTML = `<button type="button" class="chain-quiz-btn"><i class="bi bi-eye-slash me-1"></i>Test me</button><span class="chain-tip">Tap a step to ask why</span>`;
   const wrap = document.createElement('div');
   wrap.className = 'chain';
   wrap.setAttribute('role', 'list');
   wrap.setAttribute('aria-label', 'Causal chain');
-  for (const step of parseChain(src)) {
+  steps.forEach((step, i) => {
     const row = document.createElement('div');
     row.className = 'chain-step';
     row.setAttribute('role', 'listitem');
     const node = escapeHtml(step.node)
       .replace(/^(↑+)/, '<span class="dir-up" aria-label="increased">$1</span>')
       .replace(/^(↓+)/, '<span class="dir-down" aria-label="decreased">$1</span>');
-    row.innerHTML = `<div class="chain-node">${node}</div>${step.why ? `<div class="chain-why">${escapeHtml(step.why)}</div>` : ''}`;
+    row.innerHTML = `<div class="chain-node" tabindex="0" role="button">${node}</div>${step.why ? `<div class="chain-why">${escapeHtml(step.why)}</div>` : ''}`;
+    const activate = () => {
+      if (wrap.classList.contains('quiz') && i > 0 && !row.classList.contains('revealed')) {
+        row.classList.add('revealed');
+        if ([...wrap.children].every((r, j) => j === 0 || r.classList.contains('revealed'))) tools.querySelector('.chain-tip').textContent = 'Chain complete. How did you do?';
+        return;
+      }
+      outer.dispatchEvent(new CustomEvent('chain:step', { bubbles: true, detail: { step: step.node, prev: i > 0 ? steps[i - 1].node : null } }));
+    };
+    const nodeEl = row.querySelector('.chain-node');
+    nodeEl.addEventListener('click', activate);
+    nodeEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        activate();
+      }
+    });
     wrap.appendChild(row);
-  }
-  return wrap;
+  });
+  tools.querySelector('.chain-quiz-btn').addEventListener('click', (e) => {
+    const on = !wrap.classList.contains('quiz');
+    wrap.classList.toggle('quiz', on);
+    wrap.querySelectorAll('.chain-step').forEach((r) => r.classList.remove('revealed'));
+    e.currentTarget.innerHTML = on ? '<i class="bi bi-eye me-1"></i>Show all' : '<i class="bi bi-eye-slash me-1"></i>Test me';
+    tools.querySelector('.chain-tip').textContent = on ? 'Say the next step out loud, then tap to check' : 'Tap a step to ask why';
+  });
+  if (steps.length >= 3) outer.appendChild(tools);
+  outer.appendChild(wrap);
+  return outer;
 }
 
 /* ---- flashcards ---- */
@@ -235,6 +272,7 @@ async function renderDiagram(host, code) {
     const { svg } = await window.mermaid.render(id, v.source);
     body.innerHTML = svg;
     fitDiagram(body);
+    makeNodesInteractive(host, body);
     host._source = v.source;
     if (v.repaired) host.querySelector('.diagram-bar span').insertAdjacentHTML('beforeend', ' <small class="ms-1">(auto-repaired)</small>');
   } catch {
@@ -247,6 +285,28 @@ async function renderDiagram(host, code) {
       if (tmp && !body.contains(tmp)) tmp.remove();
     }
   }
+}
+
+/** Tap or press Enter on a box to ask about it (the page decides what "ask" means). */
+function makeNodesInteractive(host, body) {
+  const nodes = body.querySelectorAll('g.node');
+  if (!nodes.length) return;
+  nodes.forEach((n) => {
+    const label = n.textContent.replace(/\s+/g, ' ').trim();
+    n.classList.add('node-ask');
+    n.setAttribute('tabindex', '0');
+    n.setAttribute('role', 'button');
+    n.setAttribute('aria-label', `Ask about ${label}`);
+    const fire = () => host.dispatchEvent(new CustomEvent('diagram:node', { bubbles: true, detail: { label } }));
+    n.addEventListener('click', fire);
+    n.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        fire();
+      }
+    });
+  });
+  host.querySelector('.diagram-bar > span')?.insertAdjacentHTML('beforeend', ' <small class="ms-1 diagram-tip">· tap a box to ask about it</small>');
 }
 
 /**
@@ -339,4 +399,16 @@ function enhanceCitations(root, sources) {
   }
   CITE_RE.lastIndex = 0;
   return cited;
+}
+
+/** Reads the hidden ```concepts JSON block a lesson ends with (null if absent or invalid). */
+export function extractConceptBlock(text = '') {
+  const m = String(text).match(/```concepts\s*\n([\s\S]*?)```/);
+  if (!m) return null;
+  try {
+    const obj = JSON.parse(m[1].trim());
+    return obj && typeof obj.concept === 'string' ? obj : null;
+  } catch {
+    return null;
+  }
 }

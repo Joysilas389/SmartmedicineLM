@@ -22,6 +22,9 @@ const DEFAULTS = {
   ghanaContext: false,
   retrievalK: 6,
   sidebarCollapsed: false,
+  scheduler: 'fsrs',
+  semanticSearch: !(typeof navigator !== 'undefined' && navigator.connection?.saveData),
+  studyPlan: null,
   policy: {
     mechanism_first: true,
     step1_high_yield: true,

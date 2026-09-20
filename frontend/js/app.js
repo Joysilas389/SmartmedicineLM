@@ -8,9 +8,18 @@ import { initLibrary, loadDocuments, renderLibrary, renderSourcesPage } from './
 import { initViewer, openViewer } from './viewer.js';
 import { renderFlashcards, updateDueBadge } from './flashcards.js';
 import { initLearn } from './learn.js';
-import { renderSettings, renderSoon, applyTheme } from './settings.js';
+import { renderSettings, applyTheme } from './settings.js';
+import { renderQuestions } from './questions.js';
+import { renderProgress } from './progress.js';
+import { renderKnowledge } from './knowledge.js';
+import { loadKnowledge, reloadKnowledge } from './knowledge-store.js';
+import { initAccount, renderAccountPill } from './account.js';
+import { initLocalFiles, renderBackupPill } from './data-ui.js';
+import { scheduleIndexing, invalidateVectors } from './embeddings.js';
+import { renderWhiteboard } from './whiteboard.js';
+import { invalidateIndex } from './retrieval.js';
 
-const TITLES = { library: 'Library', learn: 'Learn', flashcards: 'Flashcards', sources: 'Sources', settings: 'Settings' };
+const TITLES = { library: 'Library', learn: 'Learn', flashcards: 'Flashcards', sources: 'Sources', settings: 'Settings', questions: 'Questions', progress: 'Progress', knowledge: 'Knowledge', whiteboard: 'Whiteboard' };
 
 function showView(name, nav = name) {
   $$('.view').forEach((v) => (v.hidden = v.id !== `view-${name}`));
@@ -30,7 +39,9 @@ function setTitle(text) {
 }
 
 async function route() {
-  const parts = (location.hash.replace(/^#\/?/, '') || 'chat').split('/').map(decodeURIComponent);
+  const [path, query = ''] = location.hash.replace(/^#\/?/, '').split('?');
+  const parts = (path || 'chat').split('/').map(decodeURIComponent);
+  const params = Object.fromEntries(new URLSearchParams(query));
   const [view, a, b] = parts;
   closeOffcanvas();
 
@@ -79,10 +90,24 @@ async function route() {
       renderSettings();
       break;
     case 'questions':
+      showView('questions');
+      setTitle(TITLES.questions);
+      await renderQuestions(params);
+      break;
     case 'progress':
+      showView('progress');
+      setTitle(TITLES.progress);
+      await renderProgress();
+      break;
     case 'knowledge':
-      showView('soon', view);
-      setTitle(renderSoon(view));
+      showView('knowledge');
+      setTitle(TITLES.knowledge);
+      await renderKnowledge(a, params);
+      break;
+    case 'whiteboard':
+      showView('whiteboard');
+      setTitle(TITLES.whiteboard);
+      await renderWhiteboard(a);
       break;
     default:
       location.replace('#/chat');
@@ -156,7 +181,7 @@ async function boot() {
   initLearn();
 
   try {
-    await Promise.all([loadChats(), loadDocuments()]);
+    await Promise.all([loadChats(), loadDocuments(), loadKnowledge()]);
   } catch (err) {
     console.error(err);
     toast('Local storage is unavailable (private browsing?). Chats will not be saved.', 'danger', 8000);
@@ -165,6 +190,29 @@ async function boot() {
   updateDueBadge().catch(() => {});
   requestPersistence();
   loadModelInfo();
+  await initAccount();
+  await initLocalFiles();
+  document.addEventListener('localfiles:status', renderBackupPill);
+  document.addEventListener('localfiles:restored', async (e) => {
+    await Promise.all([loadChats(), loadDocuments(), reloadKnowledge()]);
+    invalidateIndex();
+    renderChatList();
+    updateDueBadge().catch(() => {});
+    toast(`Restored ${e.detail.restored} records from your saved Excel file.`, 'success', 5000);
+    route();
+  });
+
+  // Another device's changes arrived: refresh everything that reads from storage.
+  document.addEventListener('sync:applied', async () => {
+    await Promise.all([loadChats(), loadDocuments(), reloadKnowledge()]);
+    invalidateIndex();
+    invalidateVectors();
+    renderChatList();
+    updateDueBadge().catch(() => {});
+    scheduleIndexing();
+    if (!document.querySelector('#view-chat:not([hidden]) .msg') && !document.querySelector('.q-card')) route();
+  });
+  setTimeout(scheduleIndexing, 3000); // index existing documents by meaning in the background
 
   window.addEventListener('hashchange', route);
   await route();

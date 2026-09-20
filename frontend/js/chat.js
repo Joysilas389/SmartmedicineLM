@@ -2,7 +2,8 @@
 import { state, saveSettings, POLICY_TOGGLES } from './state.js';
 import { db } from './store.js';
 import { $, $$, uid, escapeHtml, toast, confirmDialog, promptDialog, downloadText, debounce } from './ui.js';
-import { renderMessage, handleDiagramAction } from './render.js';
+import { renderMessage, handleDiagramAction, extractConceptBlock } from './render.js';
+import { planFor, mergeLessonBlock, recordEvidence } from './knowledge-store.js';
 import { checkCitations } from './validators.js';
 import { search } from './retrieval.js';
 import { imageForModel, classifyFile } from './ingestion.js';
@@ -10,13 +11,24 @@ import { uploadFiles } from './library.js';
 import { addCards } from './flashcards.js';
 
 const els = {};
-const composer = { images: [], pinned: null, uploads: new Map() };
+const composer = { images: [], pinned: null, uploads: new Map(), imageKind: 'auto', imageTask: 'explain' };
+
+/* Phase 3: what kind of medical image is attached, and whether to explain it or practise reading it. */
+const IMAGE_KIND_OPTIONS = [
+  ['auto', 'Auto-detect'],
+  ['ecg', 'ECG'],
+  ['radiology', 'X-ray / CT / MRI'],
+  ['histology', 'Histology'],
+  ['pathology', 'Pathology'],
+  ['clinical', 'Clinical photo'],
+  ['diagram', 'Diagram / notes'],
+];
 let lastRequest = null;
 
 const BRAND_SVG = document.querySelector('.brand-mark')?.innerHTML || '';
 const MODE_LABEL = { auto: 'Auto', learn: 'Learn', review: 'Review', recall: 'Active recall' };
 const KNOW_LABEL = { hybrid: 'Hybrid', library: 'My library', general: 'General' };
-const TAG_LABEL = { learn: 'Learn', review: 'Review', recall: 'Active recall', concise: 'Direct answer', standard: 'Explain', image: 'Image', continue: 'Continued' };
+const TAG_LABEL = { learn: 'Learn', review: 'Review', recall: 'Active recall', concise: 'Direct answer', standard: 'Explain', image: 'Image', image_quiz: 'Image practice', image_eval: 'Image feedback', continue: 'Continued' };
 
 export function currentChat() {
   return state.chats.find((c) => c.id === state.currentChatId) || null;
@@ -87,6 +99,11 @@ export function initChat() {
 
   // thread delegation: citations, sources, diagrams, flashcards, copy, retry
   els.thread.addEventListener('click', onThreadClick);
+  // Interactive diagrams: turn a tapped diagram box or chain step into a follow-up question.
+  els.thread.addEventListener('diagram:node', (e) => prefill(`In the diagram above, explain "${e.detail.label}": what causes it, and what does it lead to?`));
+  els.thread.addEventListener('chain:step', (e) =>
+    prefill(e.detail.prev ? `In the chain above, why does "${e.detail.prev}" lead to "${e.detail.step}"?` : `In the chain above, explain "${e.detail.step}" from first principles.`)
+  );
 
   // sidebar list
   els.search.addEventListener('input', debounce(renderChatList, 120));
@@ -307,7 +324,8 @@ async function send() {
     toast('Wait for your files to finish processing, then send.', 'warning');
     return;
   }
-  const prompt = text || 'Explain this image from absolute zero.';
+  const practising = composer.images.length && composer.imageTask === 'quiz';
+  const prompt = text || (practising ? 'I want to read this image myself first.' : 'Explain this image from absolute zero.');
 
   let chat = currentChat();
   if (!chat) {
@@ -332,13 +350,24 @@ async function send() {
   const images = composer.images.splice(0);
   const pinned = composer.pinned;
   composer.pinned = null;
+  const imageKind = composer.imageKind;
+  const imageTask = images.length ? composer.imageTask : null;
+  composer.imageTask = 'explain';
   const userMsg = {
     id: uid('msg'),
     chatId: chat.id,
     role: 'user',
     content: prompt,
     images: images.map((i) => i.preview),
-    context: pinned ? `${pinned.title}, p. ${pinned.page}` : '',
+    // Full-size copies stay on this device so an image-practice answer can be checked against the image.
+    imageData: images.length ? images.map(({ mediaType, data }) => ({ mediaType, data })) : undefined,
+    imageKind: images.length ? imageKind : undefined,
+    imageTask: imageTask || undefined,
+    context: pinned
+      ? `${pinned.title}, p. ${pinned.page}`
+      : images.length && (imageKind !== 'auto' || imageTask === 'quiz')
+      ? [IMAGE_KIND_OPTIONS.find(([k]) => k === imageKind)?.[1], imageTask === 'quiz' ? 'reading practice' : ''].filter((x) => x && x !== 'Auto-detect').join(' · ')
+      : '',
     createdAt: Date.now(),
   };
   await db.put('messages', userMsg);
@@ -384,11 +413,31 @@ async function runAssistant(chat, userMsg, images, pinned) {
   }
 
   // ---- request ----
-  const history = (await chatMessages(chat.id))
-    .filter((m) => m.id !== userMsg.id && !m.error && m.content)
-    .slice(-10)
-    .map((m) => ({ role: m.role, content: m.role === 'assistant' ? m.content.slice(0, 6000) : m.content }));
+  const earlier = (await chatMessages(chat.id)).filter((m) => m.id !== userMsg.id && !m.error && m.content).slice(-10);
+  // Image practice: if the learner is answering an image question, resend that image so it can be checked.
+  const lastAi = earlier.filter((m) => m.role === 'assistant').at(-1);
+  const imageEval = !images.length && lastAi?.mode === 'image_quiz';
+  const imageSource = imageEval ? earlier.filter((m) => m.role === 'user' && m.imageData?.length).at(-1) : null;
+  const history = earlier.map((m) => ({
+    role: m.role,
+    content: m.role === 'assistant' ? m.content.slice(0, 6000) : m.content,
+    ...(imageSource && m.id === imageSource.id ? { images: m.imageData } : {}),
+  }));
+  // ---- prerequisite engine (spec §29) ----
+  let prereq = null;
+  try {
+    const found = await planFor(userMsg.content);
+    if (found) {
+      prereq = { concept: found.concept.name, items: found.plan.map(({ name, decision }) => ({ name, decision })) };
+      aiMsg.prereq = { concept: found.concept.name, items: found.plan.filter((p) => p.decision !== 'skip').map(({ name, decision }) => ({ name, decision })) };
+      renderPrereq(node, aiMsg);
+    }
+  } catch (err) {
+    console.warn('Prerequisite engine failed', err);
+  }
+
   const payload = {
+    prerequisites: prereq,
     messages: [...history, { role: 'user', content: userMsg.content, images: images.map(({ mediaType, data }) => ({ mediaType, data })) }],
     sources: sources.map(({ tag, docName, page, section, text }) => ({ tag, docName, page, section, text })),
     controls: {
@@ -397,6 +446,9 @@ async function runAssistant(chat, userMsg, images, pinned) {
       knowledgeMode: s.knowledgeMode,
       temperature: s.temperature,
       policy: { ...s.policy, ghana_context: s.ghanaContext },
+      imageKind: userMsg.imageKind || imageSource?.imageKind || 'auto',
+      imageTask: userMsg.imageTask || 'explain',
+      imageEval,
     },
   };
   lastRequest = { chat, userMsg, images, pinned };
@@ -425,6 +477,7 @@ async function runAssistant(chat, userMsg, images, pinned) {
         const j = await res.json();
         msg = j.error || msg;
         if (j.code === 'ACCESS_CODE') msg += ' Open Settings to add it.';
+        if (j.code === 'LOGIN') document.dispatchEvent(new CustomEvent('account:signedout'));
       } catch { /* not JSON */ }
       throw new Error(msg);
     }
@@ -473,6 +526,15 @@ async function runAssistant(chat, userMsg, images, pinned) {
   aiMsg.sourcesCited = used.length > 0;
   aiMsg.invalidCitations = check.invalid;
   renderSources(node, aiMsg);
+  const block = extractConceptBlock(text);
+  if (block) {
+    const concept = mergeLessonBlock(block);
+    if (concept) {
+      aiMsg.concept = concept.name;
+      aiMsg.system = concept.system;
+    }
+  }
+  renderLessonCheck(node, aiMsg);
   await db.put('messages', aiMsg);
   await updateChat(chat, {});
   if (nearBottom()) scrollToBottom();
@@ -499,8 +561,10 @@ async function appendMessage(m, { streaming = false } = {}) {
     el.querySelector('.bubble').textContent = m.content;
   } else {
     el.innerHTML = `<div class="msg-head"><span class="brand-mark">${BRAND_SVG}</span>SmartMedicineLM<span class="mode-tag d-none"></span></div>
+      <div class="msg-prereq"></div>
       <div class="prose">${streaming ? '<div class="thinking" aria-label="Thinking"><span></span><span></span><span></span></div>' : ''}</div>
       <div class="msg-sources"></div>
+      <div class="msg-check"></div>
       <div class="msg-actions"><button class="btn-icon" data-action="copy" type="button" aria-label="Copy response" title="Copy"><i class="bi bi-copy"></i></button></div>`;
     setModeTag(el, m.mode);
     if (!streaming) {
@@ -508,10 +572,38 @@ async function appendMessage(m, { streaming = false } = {}) {
       if (m.error && !m.content) body.innerHTML = `<div class="msg-error"><strong>Couldn't get a response.</strong> ${escapeHtml(m.error)}</div>`;
       else await renderMessage(body, m.content, { final: true, sources: m.sources || [] });
       renderSources(el, m);
+      renderPrereq(el, m);
+      renderLessonCheck(el, m);
     }
   }
   els.thread.appendChild(el);
   return el;
+}
+
+const DECISION_LABEL = { teach: 'teaching first', review: 'quick review' };
+
+function renderPrereq(el, m) {
+  const box = el.querySelector('.msg-prereq');
+  if (!box || !m.prereq?.items?.length) return;
+  box.innerHTML = `<i class="bi bi-diagram-3 me-1"></i>Prerequisites for ${escapeHtml(m.prereq.concept)}: ${m.prereq.items
+    .map((i) => `<span class="prereq-chip prereq-${i.decision}">${escapeHtml(i.name)} · ${DECISION_LABEL[i.decision] || i.decision}</span>`)
+    .join(' ')}`;
+}
+
+/** "How well did this make sense?" after a lesson feeds the learner model's understanding score. */
+function renderLessonCheck(el, m) {
+  const box = el.querySelector('.msg-check');
+  if (!box || !m.concept || !['learn', 'continue', 'standard'].includes(m.mode)) return;
+  const opts = [
+    ['lost', 'Lost me', 'bi-emoji-frown'],
+    ['partly', 'Partly', 'bi-emoji-neutral'],
+    ['got', 'Got it', 'bi-emoji-smile'],
+  ];
+  box.innerHTML = `<div class="lesson-check"><span>How well did <b>${escapeHtml(m.concept)}</b> make sense?</span>
+    <div class="btn-group btn-group-sm" role="group">${opts
+      .map(([k, label, icon]) => `<button type="button" class="btn ${m.rating === k ? 'btn-primary' : 'btn-outline-secondary'}" data-action="rate" data-rating="${k}"><i class="bi ${icon} me-1"></i>${label}</button>`)
+      .join('')}</div>
+    ${m.rating ? `<a class="small ms-1" href="#/questions?concept=${encodeURIComponent(m.concept)}">Test yourself on it →</a>` : ''}</div>`;
 }
 
 function setModeTag(el, mode) {
@@ -571,10 +663,27 @@ async function onThreadClick(e) {
     }
   } else if (act.dataset.action === 'save-cards') {
     const deck = act.closest('.fc-deck');
-    const n = await addCards(deck._cards || [], { chatId: state.currentChatId, topic: currentChat()?.title?.replace(/ — .*/, '') || '' });
+    const msg = await db.get('messages', act.closest('.msg').dataset.id);
+    const n = await addCards(deck._cards || [], {
+      chatId: state.currentChatId,
+      topic: currentChat()?.title?.replace(/ — .*/, '') || '',
+      concept: msg?.concept || '',
+      system: msg?.system || '',
+      source: 'lesson',
+    });
     act.disabled = true;
     act.innerHTML = `<i class="bi bi-check2 me-1"></i>Added ${n}`;
     toast(`${n} card${n === 1 ? '' : 's'} added to your deck.`, 'success');
+  } else if (act.dataset.action === 'rate') {
+    const node = act.closest('.msg');
+    const msg = await db.get('messages', node.dataset.id);
+    if (!msg?.concept) return;
+    const first = !msg.rating;
+    msg.rating = act.dataset.rating;
+    await db.put('messages', msg);
+    if (first) await recordEvidence(msg.concept, { kind: 'lesson', rating: msg.rating }, msg.system);
+    renderLessonCheck(node, msg);
+    toast(first ? 'Noted. Your progress map is updated.' : 'Rating changed.', 'success', 2500);
   } else if (act.dataset.action === 'continue') {
     if (state.streaming) return;
     act.disabled = true;
@@ -635,12 +744,27 @@ export function renderChips() {
   composer.images.forEach((img, i) =>
     chips.push(`<span class="chip"><img src="${img.preview}" alt=""><span>${escapeHtml(img.name || 'Image')}</span><button type="button" data-remove-image="${i}" aria-label="Remove image"><i class="bi bi-x"></i></button></span>`)
   );
+  if (composer.images.length)
+    chips.push(`<div class="image-opts">
+      <label class="visually-hidden" for="imgKind">Image type</label>
+      <select class="form-select form-select-sm" id="imgKind">${IMAGE_KIND_OPTIONS.map(([k, l]) => `<option value="${k}" ${composer.imageKind === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <div class="btn-group btn-group-sm" role="group" aria-label="What to do with the image">
+        <button type="button" class="btn ${composer.imageTask === 'explain' ? 'btn-primary' : 'btn-outline-secondary'}" data-img-task="explain">Explain it</button>
+        <button type="button" class="btn ${composer.imageTask === 'quiz' ? 'btn-primary' : 'btn-outline-secondary'}" data-img-task="quiz">Let me read it first</button>
+      </div></div>`);
   if (composer.pinned)
     chips.push(`<span class="chip"><i class="bi bi-pin-angle"></i><span>${escapeHtml(composer.pinned.title)}, p. ${composer.pinned.page}</span><button type="button" data-remove-pin aria-label="Remove pinned page"><i class="bi bi-x"></i></button></span>`);
   const scope = currentChat()?.docIds ?? state.pendingScope;
   if (scope?.length)
     chips.push(`<span class="chip"><i class="bi bi-collection"></i><span>${scope.length} document${scope.length > 1 ? 's' : ''} selected</span><button type="button" data-remove-scope aria-label="Use whole library"><i class="bi bi-x"></i></button></span>`);
   els.chips.innerHTML = chips.join('');
+  els.chips.querySelector('#imgKind')?.addEventListener('change', (e) => (composer.imageKind = e.target.value));
+  els.chips.querySelectorAll('[data-img-task]').forEach((b) =>
+    b.addEventListener('click', () => {
+      composer.imageTask = b.dataset.imgTask;
+      renderChips();
+    })
+  );
   els.chips.querySelectorAll('[data-remove-image]').forEach((b) =>
     b.addEventListener('click', () => {
       composer.images.splice(Number(b.dataset.removeImage), 1);

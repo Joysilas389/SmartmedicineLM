@@ -51,6 +51,7 @@
         <a class="side-link" href="#/progress" data-nav="progress"><i class="bi bi-graph-up"></i><span class="label">Progress</span></a>
         <div class="side-divider"></div>
         <a class="side-link" href="#/knowledge" data-nav="knowledge"><i class="bi bi-diagram-3"></i><span class="label">Knowledge</span></a>
+        <a class="side-link" href="#/whiteboard" data-nav="whiteboard"><i class="bi bi-easel"></i><span class="label">Whiteboard</span></a>
         <a class="side-link" href="#/sources" data-nav="sources"><i class="bi bi-bookmark-check"></i><span class="label">Sources</span></a>
       </nav>
 
@@ -67,6 +68,8 @@
       </div>
 
       <div class="sidebar-foot">
+        <div class="account-pill" id="backupPill" hidden></div>
+        <div class="account-pill" id="accountPill" hidden></div>
         <a class="side-link" href="#/settings" data-nav="settings"><i class="bi bi-gear"></i><span class="label">Settings</span></a>
         <div class="model-pill label" id="modelPill" title="Connected model">
           <span class="dot"></span><span id="modelPillText">Checking model…</span>
@@ -297,9 +300,24 @@
       <div class="page page-narrow" id="settingsPage"></div>
     </section>
 
-    <!-- ---------- ROADMAP (Questions / Progress / Knowledge) ---------- -->
-    <section class="view view-page" id="view-soon" aria-label="Coming soon" hidden>
-      <div class="page page-narrow" id="soonPage"></div>
+    <!-- ---------- QUESTIONS ---------- -->
+    <section class="view view-page" id="view-questions" aria-label="Questions" hidden>
+      <div class="page" id="questionsPage"></div>
+    </section>
+
+    <!-- ---------- PROGRESS ---------- -->
+    <section class="view view-page" id="view-progress" aria-label="Progress" hidden>
+      <div class="page" id="progressPage"></div>
+    </section>
+
+    <!-- ---------- WHITEBOARD ---------- -->
+    <section class="view view-page" id="view-whiteboard" aria-label="Whiteboard" hidden>
+      <div class="page page-wide" id="whiteboardPage"></div>
+    </section>
+
+    <!-- ---------- KNOWLEDGE ---------- -->
+    <section class="view view-page" id="view-knowledge" aria-label="Knowledge" hidden>
+      <div class="page" id="knowledgePage"></div>
     </section>
   </main>
 </div>

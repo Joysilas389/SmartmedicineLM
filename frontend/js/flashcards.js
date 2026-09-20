@@ -1,56 +1,44 @@
 /*
- * Flashcards + spaced repetition (spec §36, §38). The scheduler is a separate object
- * so SM-2 can later be swapped for FSRS or a SmartMedicine algorithm without touching the UI.
+ * Flashcards + spaced repetition (spec §36, §38). Scheduling lives in srs.js (FSRS by
+ * default, SM-2 selectable). Every card is linked to a knowledge-graph concept and every
+ * review feeds the learner model's recall score.
  */
 import { db } from './store.js';
+import { state } from './state.js';
 import { $, escapeHtml, uid, toast, confirmDialog } from './ui.js';
+import { getScheduler, GRADES, retrievability, migrateCard } from './srs.js';
+import { resolveConcept, recordEvidence, syncReviewDates } from './knowledge-store.js';
 
-const DAY = 86400000;
-
-export const SM2 = {
-  id: 'sm2',
-  grades: [
-    { key: 'again', label: 'Again', q: 0 },
-    { key: 'hard', label: 'Hard', q: 3 },
-    { key: 'good', label: 'Good', q: 4 },
-    { key: 'easy', label: 'Easy', q: 5 },
-  ],
-  next(card, q, now = Date.now()) {
-    const c = { ...card };
-    if (q < 3) {
-      c.reps = 0;
-      c.interval = 0;
-      c.lapses = (c.lapses || 0) + 1;
-      c.failures = (c.failures || 0) + 1;
-      c.ease = Math.max(1.3, (c.ease || 2.5) - 0.2);
-      c.due = now + 10 * 60000;
-    } else {
-      c.reps = (c.reps || 0) + 1;
-      c.successes = (c.successes || 0) + 1;
-      const mult = q === 3 ? 0.8 : q === 5 ? 1.3 : 1;
-      c.interval = c.reps === 1 ? 1 : c.reps === 2 ? (q === 5 ? 4 : 3) : Math.max(1, Math.round((c.interval || 1) * (c.ease || 2.5) * mult));
-      c.ease = Math.max(1.3, (c.ease || 2.5) + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02)));
-      c.due = now + c.interval * DAY;
-    }
-    c.lastReview = now;
-    return c;
-  },
-  preview(card, q) {
-    const n = this.next(card, q);
-    const ms = n.due - Date.now();
-    return ms < DAY ? `${Math.round(ms / 60000)} min` : `${Math.round(ms / DAY)} d`;
-  },
-};
-
-const scheduler = SM2;
+const scheduler = () => getScheduler(state.settings.scheduler);
 let session = null;
 
-export async function addCards(cards, { chatId = null, topic = '' } = {}) {
+/**
+ * Adds cards, skipping duplicates. `concept` (name) links them to the knowledge graph;
+ * `source` records where they came from ('lesson' | 'question' | 'page').
+ */
+export async function addCards(cards, { chatId = null, topic = '', concept = '', system = '', source = 'lesson' } = {}) {
   const now = Date.now();
   const existing = new Set((await db.all('flashcards')).map((c) => c.q.trim().toLowerCase()));
+  const node = resolveConcept(concept || topic, system);
   const fresh = cards
     .filter((c) => c.q && c.a && !existing.has(c.q.trim().toLowerCase()))
-    .map((c) => ({ id: uid('card'), q: c.q.trim(), a: c.a.trim(), type: c.type || '', topic, chatId, createdAt: now, due: now, interval: 0, ease: 2.5, reps: 0, lapses: 0, successes: 0, failures: 0 }));
+    .map((c) => ({
+      id: uid('card'),
+      q: c.q.trim(),
+      a: c.a.trim(),
+      type: c.type || '',
+      topic: node?.name || topic,
+      conceptId: node?.id || null,
+      source,
+      chatId,
+      createdAt: now,
+      due: now,
+      state: 'new',
+      reps: 0,
+      lapses: 0,
+      successes: 0,
+      failures: 0,
+    }));
   if (fresh.length) await db.putMany('flashcards', fresh);
   await updateDueBadge();
   return fresh.length;
@@ -69,10 +57,11 @@ export async function renderFlashcards() {
   const cards = (await db.all('flashcards')).sort((a, b) => a.due - b.due);
   const due = cards.filter((c) => c.due <= Date.now());
   const learned = cards.filter((c) => (c.interval || 0) >= 21).length;
+  syncReviewDates(cards).catch(() => {});
   page.innerHTML = `
     <div class="page-head"><div>
       <h2 class="page-title">Flashcards</h2>
-      <p class="page-sub">Mechanism cards saved from your lessons, scheduled with spaced repetition so you review each one just before you'd forget it.</p>
+      <p class="page-sub">Mechanism cards from your lessons and missed questions, scheduled with ${scheduler().name} so each comes back just before you'd forget it.</p>
     </div>
     ${due.length ? `<button class="btn btn-primary" id="startReview" type="button"><i class="bi bi-play-fill me-1"></i>Review ${due.length} due</button>` : ''}</div>
     <div class="stat-row">
@@ -82,10 +71,11 @@ export async function renderFlashcards() {
     </div>
     ${
       cards.length
-        ? `<div class="table-responsive"><table class="table card-table align-middle"><thead><tr><th>Question</th><th class="d-none d-md-table-cell">Topic</th><th>Next review</th><th></th></tr></thead><tbody>
+        ? `<div class="table-responsive"><table class="table card-table align-middle"><thead><tr><th>Question</th><th class="d-none d-md-table-cell">Concept</th><th class="d-none d-sm-table-cell" title="Estimated chance you'd recall it right now">Recall now</th><th>Next review</th><th></th></tr></thead><tbody>
         ${cards
           .map(
             (c) => `<tr><td>${escapeHtml(c.q)}</td><td class="d-none d-md-table-cell text-body-secondary">${escapeHtml(c.topic || '')}</td>
+          <td class="d-none d-sm-table-cell">${recallCell(c)}</td>
           <td class="text-nowrap">${c.due <= Date.now() ? '<span class="status status-processing">Due</span>' : new Date(c.due).toLocaleDateString()}</td>
           <td><button class="btn btn-icon" data-del-card="${c.id}" aria-label="Delete card"><i class="bi bi-trash"></i></button></td></tr>`
           )
@@ -124,8 +114,8 @@ function renderReview() {
         ${session.shown ? `<div class="answer">${escapeHtml(card.a)}</div>` : ''}</div>
       ${
         session.shown
-          ? `<div class="grade-row">${scheduler.grades
-              .map((g) => `<button class="btn ${g.key === 'again' ? 'btn-outline-danger' : g.key === 'good' ? 'btn-primary' : 'btn-outline-primary'}" data-grade="${g.q}">${g.label}<small>${scheduler.preview(card, g.q)}</small></button>`)
+          ? `<div class="grade-row">${GRADES
+              .map((g) => `<button class="btn ${g.key === 'again' ? 'btn-outline-danger' : g.key === 'good' ? 'btn-primary' : 'btn-outline-primary'}" data-grade="${g.grade}">${g.label}<small>${scheduler().preview(card, g.grade)}</small></button>`)
               .join('')}</div>`
           : `<button class="btn btn-primary w-100 mt-3" id="showAnswer" type="button">Show answer</button>`
       }
@@ -140,15 +130,26 @@ function renderReview() {
   });
   page.querySelectorAll('[data-grade]').forEach((b) =>
     b.addEventListener('click', async () => {
-      const q = Number(b.dataset.grade);
-      const next = scheduler.next(card, q);
+      const grade = Number(b.dataset.grade);
+      const now = Date.now();
+      const next = scheduler().next(migrateCard(card), grade, now);
       await db.put('flashcards', next);
+      await db.put('reviews', { id: uid('rev'), cardId: card.id, conceptId: card.conceptId || null, grade, at: now, interval: next.interval, stability: next.stability ?? null });
+      if (card.conceptId || card.topic) recordEvidence(card.conceptId ? { id: card.conceptId, name: card.topic, system: '' } : card.topic, { kind: 'card', grade }).catch(() => {});
       session.queue.shift();
-      if (q < 3) session.queue.push(next); // see it again this session
+      if (grade === 1) session.queue.push(next); // see it again this session
       else session.done++;
       session.shown = false;
       await updateDueBadge();
       renderReview();
     })
   );
+}
+
+function recallCell(c) {
+  const r = retrievability(migrateCard(c));
+  if (r == null) return '<span class="text-body-secondary">new</span>';
+  const pct = Math.round(r * 100);
+  const cls = pct >= 85 ? 'text-success' : pct >= 70 ? 'text-warning' : 'text-danger';
+  return `<span class="${cls}">${pct}%</span>`;
 }

@@ -85,17 +85,17 @@ export function confirmDialog(title, message, okText = 'Delete', danger = true) 
   }).then(Boolean);
 }
 
-export function promptDialog(title, value = '', label = 'Name') {
+export function promptDialog(title, value = '', label = 'Name', type = 'text') {
   return openDialog({
     title,
-    bodyHtml: `<label class="form-label" for="dlgInput">${escapeHtml(label)}</label><input class="form-control" id="dlgInput" maxlength="140" value="${escapeHtml(value)}">`,
+    bodyHtml: `<label class="form-label" for="dlgInput">${escapeHtml(label)}</label><input class="form-control" id="dlgInput" type="${type}" maxlength="200" value="${escapeHtml(value)}">`,
     okText: 'Save',
     onOpen: () => {
       const i = document.getElementById('dlgInput');
       i.focus();
       i.select();
     },
-    collect: () => document.getElementById('dlgInput').value.trim() || null,
+    collect: () => (type === 'password' ? document.getElementById('dlgInput').value : document.getElementById('dlgInput').value.trim()) || null,
   });
 }
 

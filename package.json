@@ -1,12 +1,20 @@
 {
   "name": "smartmedicinelm",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "description": "SmartMedicineLM: AI medical education, USMLE preparation and document intelligence platform.",
   "type": "module",
   "scripts": {
     "dev": "vercel dev",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "local": "node local/server.mjs"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "pg": "^8.13.0"
   },
   "engines": {
     "node": ">=18"

@@ -73,3 +73,82 @@ export function layersFor(policy) {
   if (policy.active_recall) layers.push('Active recall prompts');
   return layers;
 }
+
+export const SYSTEMS = [
+  'Foundations', 'Cardiovascular', 'Renal', 'Respiratory', 'Endocrine', 'Gastrointestinal',
+  'Hematology & Oncology', 'Neurology', 'Immunology', 'Microbiology & Infectious disease',
+  'Pharmacology', 'Reproductive & Musculoskeletal',
+];
+
+/** Hidden structured block that feeds the knowledge graph (spec §30–31). */
+export const CONCEPTS = `Knowledge graph block: as the very last thing in your answer, after everything else, add a fenced block with the language "concepts" containing ONE valid JSON object and nothing else:
+{"concept": "canonical name of the main topic", "system": "<one of: ${SYSTEMS.join(' | ')}>", "prerequisites": ["2–6 concepts the learner must understand first"], "relations": [["causes", "finding or concept"], ["treated_by", "..."]]}
+Relation types allowed: causes, caused_by, inhibits, activates, associated_with, presents_with, diagnosed_by, treated_by, differential_of. Up to 10 relations, each target a short noun phrase. The block is hidden from the learner and read by software, so it must be strict JSON (double quotes, no comments, no trailing commas).`;
+
+/** Prerequisite plan from the learner model (spec §29). */
+export function prerequisiteInstructions(plan, mode) {
+  if (!plan?.items?.length) return '';
+  const pick = (d) => plan.items.filter((i) => i.decision === d).map((i) => i.name);
+  const teach = pick('teach');
+  const review = pick('review');
+  const skip = pick('skip');
+  if (mode === 'review' || mode === 'concise') {
+    return teach.length
+      ? `PREREQUISITE GAPS (from this learner's progress data): the learner has shown gaps in ${teach.join('; ')}. Where one matters for this answer, add a one-sentence reminder of it.`
+      : '';
+  }
+  const lines = [`PREREQUISITES for "${plan.concept}" (from this learner's progress data; integrate them into the foundation part of the lesson rather than listing them):`];
+  if (teach.length) lines.push(`- Teach properly before the main topic, because the learner has shown gaps: ${teach.join('; ')}.`);
+  if (review.length) lines.push(`- Briefly review, one or two sentences each: ${review.join('; ')}.`);
+  if (skip.length) lines.push(`- Already mastered; do not re-teach (a passing reference is fine): ${skip.join('; ')}.`);
+  return lines.length > 1 ? lines.join('\n') : '';
+}
+
+/* ---------------------------------------------------------------------------
+ * Phase 3: multimodal medical image understanding (spec §73).
+ * One systematic approach per image kind, so the model reads images the way a
+ * clinician is taught to, and explains the mechanism behind each finding.
+ * ------------------------------------------------------------------------- */
+export const IMAGE_KINDS = ['auto', 'ecg', 'radiology', 'histology', 'pathology', 'clinical', 'diagram'];
+
+const IMAGE_APPROACH = {
+  ecg: `ECG: read it systematically in this order and show each step:
+1. Rate (300 ÷ large squares between R waves, or count QRS complexes in 10 s × 6).
+2. Rhythm: regular or not; a P wave before every QRS and a QRS after every P?
+3. Axis from leads I and aVF (then II if borderline).
+4. Intervals: PR (120–200 ms), QRS (< 120 ms), QTc (roughly < 440 ms in men, < 460 ms in women).
+5. P-wave morphology.
+6. QRS: pathological Q waves, bundle-branch patterns, voltage criteria for hypertrophy, R-wave progression.
+7. ST segments and T waves by territory (inferior II, III, aVF; lateral I, aVL, V5–V6; septal V1–V2; anterior V3–V4) and any reciprocal change.
+8. One-line interpretation.
+Then explain the electrophysiology behind each abnormal finding as a chain, the clinical situations that cause it, and what an examiner would ask. Never invent a measurement you cannot read: if calibration, lead labels or part of the tracing is unclear, say what cannot be determined.`,
+  radiology: `RADIOLOGY: state the modality, view or plane (contrast phase or MRI sequence when identifiable) and whether the image is adequate. Chest X-ray: go through ABCDE (Airway; Breathing: lungs and pleura; Cardiac size and mediastinum; Diaphragm and below it; Everything else: bones, soft tissue, lines and tubes). CT/MRI: name the level and window, then go organ by organ. Describe each finding in radiological language (location, size, density or signal, margins, effect on neighbours), then in plain language, then explain the pathophysiology that produces that appearance (e.g. why consolidation shows air bronchograms). Give a ranked differential with the feature that favours each option, and name any classic Step 1 sign present.`,
+  histology: `HISTOLOGY: identify the stain (H&E: hematoxylin colours nuclei blue-purple, eosin colours cytoplasm and collagen pink; name any special stain), the approximate magnification, and the tissue or organ with the architectural clues that give it away. Then name the key cells and structures and link each structure to its function. If something looks abnormal, compare it with the normal appearance and explain what process changes it.`,
+  pathology: `PATHOLOGY: for a gross specimen describe organ, size, colour, consistency and the lesions with their distribution; for microscopy go from architecture to cells (nuclear features, mitoses, necrosis, inflammation, deposits). Then give the most likely diagnosis and walk clue → mechanism → diagnosis for each key feature, a differential with the distinguishing feature of each, and the classic Step 1 associations.`,
+  clinical: `CLINICAL PHOTOGRAPH (skin, eye, mouth, limb, physical sign): describe it with proper morphology (primary lesion, colour, size, surface, distribution, configuration) first in medical terms and then in plain language. Say how the sign typically looks on darker skin as well as lighter skin. Then explain the mechanism that produces the appearance, a ranked differential with distinguishing features, and the key Step 1 associations.`,
+  diagram: `DIAGRAM, TABLE OR NOTES: first describe what the image shows (type, text, labels, arrows, structures, axes). Preserve the relationships you can see as a chain (arrow A → structure B → process C → clinical finding D), then teach the underlying concept from zero in plain language, and finish with what an examiner would want you to notice.`,
+};
+
+export function imageInstructions(kind = 'auto') {
+  if (IMAGE_APPROACH[kind]) return `IMAGE TYPE (chosen by the learner): ${kind.toUpperCase()}.\n${IMAGE_APPROACH[kind]}`;
+  return `IMAGE TYPE: not specified. First decide what kind of image it is, say so in one line, then apply the matching approach:\n\n${Object.values(IMAGE_APPROACH).join('\n\n')}`;
+}
+
+export const IMAGE_SAFETY = `Image safety: you are teaching, not issuing a clinical report. If the image looks like a real patient's study and the learner seems to be asking for a diagnosis to act on, say briefly that it must be read by a qualified clinician. Do not identify people in photographs.`;
+
+export function imagePracticeInstructions(kind = 'auto') {
+  const checklist = {
+    ecg: 'rate · rhythm · axis · PR / QRS / QTc · P waves · QRS morphology · ST / T changes (which leads) · your interpretation',
+    radiology: 'modality and view · adequacy · systematic findings (ABCDE for a chest X-ray) · most likely diagnosis · one differential and why it is less likely',
+    histology: 'stain · magnification · tissue or organ and the clue that tells you · key cells and structures · normal or abnormal',
+    pathology: 'gross or microscopic · key features · most likely diagnosis · the mechanism behind the main feature · a differential',
+    clinical: 'morphology of the lesion · distribution · most likely diagnosis · differential · one investigation you would want',
+    diagram: 'what the image shows · the main relationship or pathway · the clinical consequence',
+  }[kind];
+  return `MODE: IMAGE PRACTICE (active recall on an image). Do NOT interpret the image and do NOT reveal any finding or diagnosis yet.
+In one sentence say what kind of image this is only if the learner needs that to start${kind !== 'auto' ? ' (they already told you it is: ' + kind + ')' : ''}. Then give a short checklist for them to fill in${checklist ? `: ${checklist}` : ', appropriate to the image type'}. Invite them to write their reading. Nothing else.`;
+}
+
+export const IMAGE_EVALUATION = `MODE: IMAGE PRACTICE: EVALUATE. The learner has written their own reading of the image in the earlier message. Read the image yourself, systematically, then compare. Use these "##" headings:
+What you got right · What you missed or misread · The systematic reading (your full step-by-step reading) · Mechanism (one chain block for the main finding) · Memory anchor
+Then classify each error as one of: knowledge gap, mechanism gap, recognition failure, misread clue, differential confusion, calculation error, distractor trap, recall failure. Be specific and encouraging; quote their words when you correct them.`;
