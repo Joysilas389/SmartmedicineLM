@@ -234,13 +234,38 @@ async function renderDiagram(host, code) {
   try {
     const { svg } = await window.mermaid.render(id, v.source);
     body.innerHTML = svg;
+    fitDiagram(body);
     host._source = v.source;
     if (v.repaired) host.querySelector('.diagram-bar span').insertAdjacentHTML('beforeend', ' <small class="ms-1">(auto-repaired)</small>');
   } catch {
-    body.innerHTML = `<pre class="text-start">${escapeHtml(code)}</pre>`;
+    body.innerHTML = `<div class="diagram-pending">This diagram couldn't be drawn automatically. Its source is below.</div><pre class="text-start">${escapeHtml(code)}</pre>`;
   } finally {
-    document.getElementById(id)?.remove();
-    document.getElementById('d' + id)?.remove();
+    // Remove only Mermaid's temporary render nodes. The finished SVG carries the
+    // same id, so never delete an element that now lives inside the diagram.
+    for (const tmpId of [id, 'd' + id]) {
+      const tmp = document.getElementById(tmpId);
+      if (tmp && !body.contains(tmp)) tmp.remove();
+    }
+  }
+}
+
+/**
+ * Mermaid scales wide diagrams down to the container, which makes labels
+ * unreadable on phones. Keep text at >= ~70% size and let the box scroll sideways.
+ */
+function fitDiagram(body) {
+  const svg = body.querySelector('svg');
+  const vb = svg?.viewBox?.baseVal;
+  if (!vb || !vb.width) return;
+  const readable = vb.width * 0.7;
+  const avail = body.clientWidth || 320;
+  if (readable > avail) {
+    svg.style.maxWidth = 'none';
+    svg.style.width = `${Math.round(readable)}px`;
+    svg.style.height = 'auto';
+    body.classList.add('diagram-scroll');
+    requestAnimationFrame(() => (body.scrollLeft = (body.scrollWidth - body.clientWidth) / 2));
+    body.insertAdjacentHTML('afterend', '<div class="diagram-hint"><i class="bi bi-arrows"></i> Swipe to explore, or tap <i class="bi bi-arrows-fullscreen"></i> for full screen</div>');
   }
 }
 

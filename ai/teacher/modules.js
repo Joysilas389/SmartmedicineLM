@@ -27,7 +27,8 @@ ACE inhibition :: the enzyme that makes angiotensin II is blocked
 - Never output raw HTML.`;
 
 export const MERMAID = `Diagrams: when a diagram genuinely improves understanding, add ONE Mermaid (v10) flowchart in a \`\`\`mermaid block.
-- Start with "flowchart TD" or "flowchart LR".
+- Start with "flowchart TD" (top-down reads best on phones; avoid LR).
+- Keep it narrow: at most 3 branches side by side at any level, and labels of 2–6 words (put detail in the text, not the node).
 - Use simple node ids (A, B, C1) and ALWAYS put labels in double quotes: A["Low albumin (hypoalbuminemia)"]. Do not use double quotes inside labels.
 - Keep it under 14 nodes. Use only --> arrows, optionally with |"text"| labels.
 - Colour nodes with these predefined classes (do not write classDef lines yourself): pathology (danger/pathology), mechanism (molecular or cellular mechanism), compensation (compensation/warning), normal (normal/resolved). Example: class A,B pathology`;

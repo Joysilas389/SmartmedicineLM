@@ -309,6 +309,9 @@ body {
 .diagram-body { padding: 12px; overflow-x: auto; text-align: center; background: var(--sm-paper); }
 .diagram-body svg { max-width: 100%; height: auto; }
 .diagram.collapsed .diagram-body { display: none; }
+.diagram-body.diagram-scroll { text-align: left; -webkit-overflow-scrolling: touch; }
+.diagram-hint { font-size: .75rem; color: var(--sm-muted); text-align: center; padding: 0 12px 8px; background: var(--sm-paper); }
+.diagram.collapsed .diagram-hint { display: none; }
 .diagram-pending { padding: 18px; color: var(--sm-muted); font-family: var(--sm-font-ui); font-size: .86rem; text-align: center; }
 .diagram-full { overflow: auto; text-align: center; }
 .diagram-full svg { max-width: none; min-width: 100%; height: auto; }
