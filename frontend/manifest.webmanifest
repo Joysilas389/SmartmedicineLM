@@ -1,0 +1,9 @@
+{
+  "name": "SmartMedicineLM",
+  "short_name": "SmartMedicine",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fbfbfd",
+  "theme_color": "#4a3f8f",
+  "icons": [{ "src": "assets/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

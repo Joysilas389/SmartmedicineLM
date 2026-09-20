@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en" data-bs-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="description" content="SmartMedicineLM: learn medicine from first principles with your own sources.">
+  <meta name="theme-color" content="#fbfbfd" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16141f" media="(prefers-color-scheme: dark)">
+  <title>SmartMedicineLM</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="css/app.css" rel="stylesheet">
+</head>
+<body>
+<a class="visually-hidden-focusable skip-link" href="#main">Skip to content</a>
+
+<div class="app-shell">
+  <!-- ============ SIDEBAR (offcanvas below lg, docked on lg+) ============ -->
+  <aside class="sidebar offcanvas-lg offcanvas-start" id="sidebar" tabindex="-1" aria-label="Main navigation">
+    <div class="sidebar-inner">
+      <div class="sidebar-head">
+        <a href="#/chat" class="brand" aria-label="SmartMedicineLM home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" width="26" height="26"><circle cx="16" cy="16" r="14" fill="var(--sm-hema)"/><circle cx="12" cy="13" r="4.2" fill="var(--sm-eosin)"/><circle cx="20.5" cy="18.5" r="3" fill="#fff" opacity=".85"/><circle cx="13" cy="21.5" r="1.8" fill="#fff" opacity=".6"/></svg>
+          </span>
+          <span class="brand-name label">SmartMedicine<span class="brand-lm">LM</span></span>
+        </a>
+        <button class="btn btn-icon d-none d-lg-inline-flex" id="collapseSidebar" type="button" aria-label="Collapse sidebar" data-bs-toggle="tooltip" data-bs-placement="right" title="Collapse sidebar">
+          <i class="bi bi-layout-sidebar"></i>
+        </button>
+        <button class="btn btn-icon d-lg-none" type="button" data-bs-dismiss="offcanvas" data-bs-target="#sidebar" aria-label="Close menu">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+
+      <button class="btn btn-new-chat" id="newChatBtn" type="button">
+        <i class="bi bi-plus-lg"></i><span class="label">New chat</span>
+      </button>
+
+      <nav class="side-nav" aria-label="Sections">
+        <a class="side-link" href="#/chat" data-nav="chat"><i class="bi bi-chat-left-text"></i><span class="label">Chats</span></a>
+        <a class="side-link" href="#/library" data-nav="library"><i class="bi bi-journal-medical"></i><span class="label">Library</span></a>
+        <a class="side-link" href="#/learn" data-nav="learn"><i class="bi bi-mortarboard"></i><span class="label">Learn</span></a>
+        <a class="side-link" href="#/questions" data-nav="questions"><i class="bi bi-ui-checks"></i><span class="label">Questions</span></a>
+        <a class="side-link" href="#/flashcards" data-nav="flashcards"><i class="bi bi-stack"></i><span class="label">Flashcards</span><span class="badge rounded-pill ms-auto due-badge d-none" id="dueBadge"></span></a>
+        <a class="side-link" href="#/progress" data-nav="progress"><i class="bi bi-graph-up"></i><span class="label">Progress</span></a>
+        <div class="side-divider"></div>
+        <a class="side-link" href="#/knowledge" data-nav="knowledge"><i class="bi bi-diagram-3"></i><span class="label">Knowledge</span></a>
+        <a class="side-link" href="#/sources" data-nav="sources"><i class="bi bi-bookmark-check"></i><span class="label">Sources</span></a>
+      </nav>
+
+      <div class="recent label">
+        <div class="recent-head">
+          <span>Recent</span>
+          <button class="btn btn-link btn-sm p-0 text-decoration-none" id="toggleArchived" type="button">Show archived</button>
+        </div>
+        <div class="search-wrap">
+          <i class="bi bi-search"></i>
+          <input type="search" class="form-control form-control-sm" id="chatSearch" placeholder="Search chats" aria-label="Search chats">
+        </div>
+        <ul class="chat-list list-unstyled" id="chatList"></ul>
+      </div>
+
+      <div class="sidebar-foot">
+        <a class="side-link" href="#/settings" data-nav="settings"><i class="bi bi-gear"></i><span class="label">Settings</span></a>
+        <div class="model-pill label" id="modelPill" title="Connected model">
+          <span class="dot"></span><span id="modelPillText">Checking model…</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main" id="main">
+    <header class="topbar">
+      <button class="btn btn-icon d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar" aria-controls="sidebar" aria-label="Open menu">
+        <i class="bi bi-list"></i>
+      </button>
+      <h1 class="topbar-title" id="topbarTitle">New chat</h1>
+      <div class="topbar-actions" id="topbarActions">
+        <div class="dropdown d-none" id="chatMenu">
+          <button class="btn btn-icon" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Chat options">
+            <i class="bi bi-three-dots-vertical"></i>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><button class="dropdown-item" data-chat-action="rename"><i class="bi bi-pencil me-2"></i>Rename</button></li>
+            <li><button class="dropdown-item" data-chat-action="favorite"><i class="bi bi-star me-2"></i><span>Add to favourites</span></button></li>
+            <li><button class="dropdown-item" data-chat-action="scope"><i class="bi bi-collection me-2"></i>Choose documents</button></li>
+            <li><button class="dropdown-item" data-chat-action="export"><i class="bi bi-download me-2"></i>Export as Markdown</button></li>
+            <li><button class="dropdown-item" data-chat-action="archive"><i class="bi bi-archive me-2"></i><span>Archive</span></button></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><button class="dropdown-item text-danger" data-chat-action="delete"><i class="bi bi-trash me-2"></i>Delete</button></li>
+          </ul>
+        </div>
+      </div>
+    </header>
+
+    <!-- ---------- CHAT ---------- -->
+    <section class="view view-chat" id="view-chat" aria-label="Chat">
+      <div class="thread" id="thread" aria-live="polite">
+        <div class="empty-state" id="emptyState">
+          <h2 class="empty-title">What would you like to understand today?</h2>
+          <p class="empty-sub">Ask about any topic, or upload your notes and I'll teach from them with page-level citations.</p>
+          <div class="starters" id="starters">
+            <button class="starter" data-prompt="Teach me nephrotic syndrome from absolute zero.">
+              <i class="bi bi-layers"></i><span>Teach me nephrotic syndrome from absolute zero</span></button>
+            <button class="starter" data-prompt="Give me a 2-minute review of aldosterone.">
+              <i class="bi bi-stopwatch"></i><span>Give me a 2-minute review of aldosterone</span></button>
+            <button class="starter" data-prompt="Test me on the renin–angiotensin–aldosterone system.">
+              <i class="bi bi-patch-question"></i><span>Test me on the renin–angiotensin–aldosterone system</span></button>
+            <button class="starter" data-action="attach-image">
+              <i class="bi bi-image"></i><span>Explain an image: a histology slide, ECG or diagram</span></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="composer-wrap">
+        <form class="composer" id="composer" autocomplete="off">
+          <div class="composer-chips" id="composerChips"></div>
+          <label for="prompt" class="visually-hidden">Message SmartMedicineLM</label>
+          <textarea id="prompt" class="composer-input" rows="1" placeholder="Ask SmartMedicineLM…" enterkeyhint="send"></textarea>
+          <div class="composer-bar">
+            <div class="composer-tools">
+              <div class="dropup">
+                <button class="btn btn-tool" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Attach">
+                  <i class="bi bi-plus-lg"></i>
+                </button>
+                <ul class="dropdown-menu">
+                  <li><button class="dropdown-item" type="button" data-attach="pdf"><i class="bi bi-file-earmark-pdf me-2"></i>Upload PDF</button></li>
+                  <li><button class="dropdown-item" type="button" data-attach="image"><i class="bi bi-image me-2"></i>Upload image</button></li>
+                  <li><button class="dropdown-item" type="button" data-attach="doc"><i class="bi bi-file-earmark-text me-2"></i>Upload document</button></li>
+                  <li><hr class="dropdown-divider"></li>
+                  <li><button class="dropdown-item" type="button" data-attach="library"><i class="bi bi-collection me-2"></i>Choose from library</button></li>
+                </ul>
+              </div>
+
+              <div class="dropup">
+                <button class="btn btn-tool btn-tool-label" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="modeBtn">
+                  <i class="bi bi-compass"></i><span id="modeLabel">Auto</span>
+                </button>
+                <div class="dropdown-menu composer-menu p-2" id="modeMenu">
+                  <div class="menu-heading">Mode</div>
+                  <div class="list-group list-group-flush" role="radiogroup" aria-label="Mode">
+                    <label class="menu-option"><input class="form-check-input" type="radio" name="mode" value="auto"><span><strong>Auto</strong><small>Adapts to how you ask</small></span></label>
+                    <label class="menu-option"><input class="form-check-input" type="radio" name="mode" value="learn"><span><strong>Learn</strong><small>Full lesson from zero</small></span></label>
+                    <label class="menu-option"><input class="form-check-input" type="radio" name="mode" value="review"><span><strong>Review</strong><small>Mechanisms and high-yield patterns</small></span></label>
+                    <label class="menu-option"><input class="form-check-input" type="radio" name="mode" value="recall"><span><strong>Active recall</strong><small>Questions first, answers after</small></span></label>
+                  </div>
+                  <div class="menu-heading mt-2">Depth</div>
+                  <div class="btn-group w-100" role="group" aria-label="Teaching depth" id="depthGroup">
+                    <input type="radio" class="btn-check" name="depth" id="depth-quick" value="quick"><label class="btn btn-sm btn-outline-secondary" for="depth-quick">Quick</label>
+                    <input type="radio" class="btn-check" name="depth" id="depth-standard" value="standard"><label class="btn btn-sm btn-outline-secondary" for="depth-standard">Standard</label>
+                    <input type="radio" class="btn-check" name="depth" id="depth-deep" value="deep"><label class="btn btn-sm btn-outline-secondary" for="depth-deep">Deep</label>
+                    <input type="radio" class="btn-check" name="depth" id="depth-comprehensive" value="comprehensive"><label class="btn btn-sm btn-outline-secondary" for="depth-comprehensive">Full</label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="dropup">
+                <button class="btn btn-tool btn-tool-label" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="knowledgeBtn">
+                  <i class="bi bi-book"></i><span id="knowledgeLabel">Hybrid</span>
+                </button>
+                <div class="dropdown-menu composer-menu p-2">
+                  <div class="menu-heading">Knowledge</div>
+                  <label class="menu-option"><input class="form-check-input" type="radio" name="knowledge" value="hybrid"><span><strong>Hybrid</strong><small>Your library plus general knowledge</small></span></label>
+                  <label class="menu-option"><input class="form-check-input" type="radio" name="knowledge" value="library"><span><strong>My library only</strong><small>Source-locked: answers only from your documents</small></span></label>
+                  <label class="menu-option"><input class="form-check-input" type="radio" name="knowledge" value="general"><span><strong>General knowledge</strong><small>Don't search my library</small></span></label>
+                </div>
+              </div>
+
+              <div class="dropup">
+                <button class="btn btn-tool" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-label="Teaching options">
+                  <i class="bi bi-sliders"></i>
+                </button>
+                <div class="dropdown-menu composer-menu p-2" id="policyMenu">
+                  <div class="menu-heading">Include</div>
+                  <!-- filled by settings.js -->
+                </div>
+              </div>
+            </div>
+
+            <div class="composer-send">
+              <button class="btn btn-tool d-none" type="button" id="micBtn" aria-label="Dictate"><i class="bi bi-mic"></i></button>
+              <button class="btn btn-send" type="submit" id="sendBtn" aria-label="Send"><i class="bi bi-arrow-up"></i></button>
+            </div>
+          </div>
+        </form>
+        <p class="composer-note">SmartMedicineLM is for learning. It can be wrong, and it does not replace clinical judgement.</p>
+      </div>
+
+      <div class="drop-overlay" id="dropOverlay" aria-hidden="true">
+        <div><i class="bi bi-cloud-arrow-up"></i><p>Drop PDFs, images or notes</p></div>
+      </div>
+    </section>
+
+    <!-- ---------- LIBRARY ---------- -->
+    <section class="view view-page" id="view-library" aria-label="Library" hidden>
+      <div class="page">
+        <div class="page-head">
+          <div>
+            <h2 class="page-title">Library</h2>
+            <p class="page-sub">Your authorised learning materials. Files stay in this browser; only the passages relevant to a question are sent to the model.</p>
+          </div>
+          <button class="btn btn-primary" type="button" id="libraryUploadBtn"><i class="bi bi-upload me-2"></i>Upload files</button>
+        </div>
+
+        <div class="dropzone" id="libraryDropzone" tabindex="0" role="button" aria-label="Upload files">
+          <i class="bi bi-file-earmark-arrow-up"></i>
+          <span>Drop PDFs, images, TXT, Markdown, CSV or DOCX here, or tap to choose</span>
+        </div>
+
+        <div class="library-tools">
+          <div class="search-wrap flex-grow-1">
+            <i class="bi bi-search"></i>
+            <input type="search" class="form-control" id="librarySearch" placeholder="Search library" aria-label="Search library">
+          </div>
+          <div class="nav nav-pills library-filter" id="libraryFilter" role="tablist">
+            <button class="nav-link active" data-filter="all" type="button">All</button>
+            <button class="nav-link" data-filter="pdf" type="button">PDFs</button>
+            <button class="nav-link" data-filter="image" type="button">Images</button>
+            <button class="nav-link" data-filter="text" type="button">Notes</button>
+          </div>
+        </div>
+
+        <div id="libraryList" class="doc-list"></div>
+      </div>
+    </section>
+
+    <!-- ---------- DOCUMENT VIEWER ---------- -->
+    <section class="view view-viewer" id="view-viewer" aria-label="Document viewer" hidden>
+      <div class="viewer-toolbar">
+        <button class="btn btn-icon" type="button" id="viewerBack" aria-label="Back to library"><i class="bi bi-arrow-left"></i></button>
+        <div class="viewer-title" id="viewerTitle"></div>
+        <div class="viewer-controls">
+          <button class="btn btn-icon" id="pgPrev" type="button" aria-label="Previous page"><i class="bi bi-chevron-up"></i></button>
+          <div class="page-input"><input type="number" min="1" id="pgInput" class="form-control form-control-sm" aria-label="Page number"><span>/ <span id="pgTotal">0</span></span></div>
+          <button class="btn btn-icon" id="pgNext" type="button" aria-label="Next page"><i class="bi bi-chevron-down"></i></button>
+          <span class="vr mx-1 d-none d-sm-block"></span>
+          <button class="btn btn-icon" id="zoomOut" type="button" aria-label="Zoom out"><i class="bi bi-zoom-out"></i></button>
+          <button class="btn btn-icon d-none d-sm-inline-flex" id="zoomFit" type="button" aria-label="Fit width"><i class="bi bi-arrows-expand-vertical"></i></button>
+          <button class="btn btn-icon" id="zoomIn" type="button" aria-label="Zoom in"><i class="bi bi-zoom-in"></i></button>
+          <button class="btn btn-icon" id="viewerSearchToggle" type="button" aria-label="Search document"><i class="bi bi-search"></i></button>
+          <button class="btn btn-icon" id="viewerTextToggle" type="button" aria-label="Show selectable page text"><i class="bi bi-text-paragraph"></i></button>
+        </div>
+      </div>
+      <div class="viewer-search" id="viewerSearch" hidden>
+        <input type="search" class="form-control form-control-sm" id="viewerSearchInput" placeholder="Search in this document">
+        <div class="viewer-results" id="viewerResults"></div>
+      </div>
+      <div class="viewer-body">
+        <div class="thumbs" id="thumbs" aria-label="Page thumbnails"></div>
+        <div class="stage" id="stage">
+          <div class="stage-inner" id="stageInner"></div>
+          <div class="page-text" id="pageText" hidden></div>
+        </div>
+      </div>
+      <div class="viewer-actions" id="viewerActions">
+        <button class="btn btn-sm btn-outline-primary" data-page-action="explain"><i class="bi bi-lightbulb me-1"></i>Explain this page</button>
+        <button class="btn btn-sm btn-outline-primary" data-page-action="teach"><i class="bi bi-layers me-1"></i>Teach this section</button>
+        <button class="btn btn-sm btn-outline-primary" data-page-action="questions"><i class="bi bi-ui-checks me-1"></i>Generate questions</button>
+        <button class="btn btn-sm btn-outline-primary" data-page-action="flashcards"><i class="bi bi-stack me-1"></i>Create flashcards</button>
+      </div>
+    </section>
+
+    <!-- ---------- LEARN ---------- -->
+    <section class="view view-page" id="view-learn" aria-label="Learn" hidden>
+      <div class="page">
+        <div class="page-head"><div>
+          <h2 class="page-title">Learn</h2>
+          <p class="page-sub">Pick a topic to start a full lesson from zero: problem, mechanism, timeline, patient, investigations, treatment, differentials, Step 1 reasoning and recall.</p>
+        </div></div>
+        <div class="input-group learn-custom mb-4">
+          <input type="text" class="form-control" id="learnTopic" placeholder="Any topic, e.g. cardiac action potential">
+          <button class="btn btn-primary" id="learnGo" type="button">Start lesson</button>
+        </div>
+        <div id="learnSystems" class="systems"></div>
+      </div>
+    </section>
+
+    <!-- ---------- FLASHCARDS ---------- -->
+    <section class="view view-page" id="view-flashcards" aria-label="Flashcards" hidden>
+      <div class="page" id="flashcardsPage"></div>
+    </section>
+
+    <!-- ---------- SOURCES ---------- -->
+    <section class="view view-page" id="view-sources" aria-label="Sources" hidden>
+      <div class="page" id="sourcesPage"></div>
+    </section>
+
+    <!-- ---------- SETTINGS ---------- -->
+    <section class="view view-page" id="view-settings" aria-label="Settings" hidden>
+      <div class="page page-narrow" id="settingsPage"></div>
+    </section>
+
+    <!-- ---------- ROADMAP (Questions / Progress / Knowledge) ---------- -->
+    <section class="view view-page" id="view-soon" aria-label="Coming soon" hidden>
+      <div class="page page-narrow" id="soonPage"></div>
+    </section>
+  </main>
+</div>
+
+<!-- hidden file inputs -->
+<input type="file" id="fileLibrary" hidden multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.md,.markdown,.csv,.docx,application/pdf,image/*,text/plain,text/markdown,text/csv">
+<input type="file" id="filePdf" hidden multiple accept=".pdf,application/pdf">
+<input type="file" id="fileImage" hidden multiple accept="image/png,image/jpeg,image/webp">
+<input type="file" id="fileDoc" hidden multiple accept=".txt,.md,.markdown,.csv,.docx,text/plain,text/markdown,text/csv">
+
+<!-- generic dialog -->
+<div class="modal fade" id="dlg" tabindex="-1" aria-labelledby="dlgTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form class="modal-content" id="dlgForm">
+      <div class="modal-header">
+        <h2 class="modal-title fs-5" id="dlgTitle"></h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="dlgBody"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="dlgOk">OK</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- choose documents for a chat -->
+<div class="modal fade" id="scopeModal" tabindex="-1" aria-labelledby="scopeTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title fs-5" id="scopeTitle">Documents for this chat</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-check form-switch mb-3">
+          <input class="form-check-input" type="checkbox" id="scopeAll">
+          <label class="form-check-label" for="scopeAll">Use my whole library</label>
+        </div>
+        <div id="scopeList" class="scope-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="scopeSave">Use selected</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- expanded diagram -->
+<div class="modal fade" id="diagramModal" tabindex="-1" aria-label="Diagram" aria-hidden="true">
+  <div class="modal-dialog modal-fullscreen-md-down modal-xl modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title fs-6">Diagram</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body diagram-full" id="diagramFull"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="toasts"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
