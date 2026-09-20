@@ -39,6 +39,22 @@ function setTitle(text) {
 }
 
 async function route() {
+  try {
+    await routeView();
+  } catch (err) {
+    console.error('Could not open this page', err);
+    const storage = err?.message === 'STORAGE_BLOCKED' || err?.blocked || /object stores|storage/i.test(err?.message || '');
+    if (storage) showBanner('storage');
+    const host = document.querySelector('.view:not([hidden]) .page') || document.querySelector('.view:not([hidden])');
+    if (host)
+      host.innerHTML = `<div class="empty-block"><i class="bi bi-exclamation-triangle"></i>
+        <p class="mb-1 fw-semibold">This page could not open</p>
+        <p class="mb-2">${storage ? 'The app cannot reach its storage in this browser. Close any other tabs of SmartMedicineLM and reload.' : 'Something went wrong loading this page.'}</p>
+        <button class="btn btn-sm btn-primary" onclick="location.reload()">Reload</button></div>`;
+  }
+}
+
+async function routeView() {
   const [path, query = ''] = location.hash.replace(/^#\/?/, '').split('?');
   const parts = (path || 'chat').split('/').map(decodeURIComponent);
   const params = Object.fromEntries(new URLSearchParams(query));
@@ -149,6 +165,42 @@ async function loadModelInfo() {
 }
 
 /* ---------------- boot ---------------- */
+const BANNERS = {
+  storage: {
+    icon: 'bi-window-stack',
+    title: 'Another tab is using an older version of this app',
+    text: 'Close the other SmartMedicineLM tabs (or restart your browser), then tap Reload. Your saved work is safe.',
+  },
+  'storage-error': {
+    icon: 'bi-exclamation-triangle',
+    title: 'This browser would not open its storage',
+    text: 'Chats and progress cannot be saved right now. Private browsing blocks storage; otherwise closing other tabs and reloading usually fixes it.',
+  },
+};
+
+function showBanner(kind, err) {
+  const b = BANNERS[kind] || BANNERS['storage-error'];
+  let el = $('#appBanner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'appBanner';
+    el.className = 'app-banner';
+    el.setAttribute('role', 'alert');
+    document.body.prepend(el);
+  }
+  el.hidden = false;
+  document.body.classList.add('has-banner');
+  el.innerHTML = `<i class="bi ${b.icon}"></i><div><b>${b.title}</b><div class="small">${b.text}${err && !BANNERS[kind] ? ` (${String(err.message || err).slice(0, 80)})` : ''}</div></div>
+    <button class="btn btn-sm btn-light ms-auto" type="button" id="bannerReload">Reload</button>`;
+  $('#bannerReload').addEventListener('click', () => location.reload());
+}
+
+const hideBanner = () => {
+  const el = $('#appBanner');
+  if (el) el.hidden = true;
+  document.body.classList.remove('has-banner');
+};
+
 async function boot() {
   applyTheme();
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
@@ -180,18 +232,34 @@ async function boot() {
   initViewer();
   initLearn();
 
-  try {
-    await Promise.all([loadChats(), loadDocuments(), loadKnowledge()]);
-  } catch (err) {
-    console.error(err);
-    toast('Local storage is unavailable (private browsing?). Chats will not be saved.', 'danger', 8000);
-  }
+  // Navigation first: even if start-up work below fails, the app still opens and routes.
+  window.addEventListener('hashchange', route);
+  document.addEventListener('storage:blocked', () => showBanner('storage'));
+  document.addEventListener('storage:unblocked', () => hideBanner());
+
+  const step = async (name, fn, onFail) => {
+    try {
+      await fn();
+    } catch (err) {
+      console.error(`${name} failed`, err);
+      onFail?.(err);
+    }
+  };
+
+  await step('storage', () => Promise.all([loadChats(), loadDocuments(), loadKnowledge()]), (err) =>
+    showBanner(err?.message === 'STORAGE_BLOCKED' || err?.blocked ? 'storage' : 'storage-error', err)
+  );
   renderChatList();
   updateDueBadge().catch(() => {});
   requestPersistence();
   loadModelInfo();
-  await initAccount();
-  await initLocalFiles();
+
+  await route();
+  document.body.classList.add('ready');
+
+  // Everything below is optional: accounts, Excel files, background indexing.
+  await step('accounts', initAccount);
+  await step('local files', initLocalFiles);
   document.addEventListener('localfiles:status', renderBackupPill);
   document.addEventListener('localfiles:restored', async (e) => {
     await Promise.all([loadChats(), loadDocuments(), reloadKnowledge()]);
@@ -213,10 +281,6 @@ async function boot() {
     if (!document.querySelector('#view-chat:not([hidden]) .msg') && !document.querySelector('.q-card')) route();
   });
   setTimeout(scheduleIndexing, 3000); // index existing documents by meaning in the background
-
-  window.addEventListener('hashchange', route);
-  await route();
-  document.body.classList.add('ready');
 }
 
 boot().catch((err) => {

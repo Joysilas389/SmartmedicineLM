@@ -150,7 +150,14 @@ body {
 .side-divider { height: 1px; background: var(--sm-rule); margin: 6px 10px; }
 .due-badge { background: var(--sm-eosin); font-size: .7rem; }
 
-.recent { display: flex; flex-direction: column; min-height: 0; flex: 1; margin-top: 8px; }
+.recent { display: flex; flex-direction: column; min-height: 0; flex: 1 1 200px; margin-top: 8px; }
+/* Keep a usable chat list on short windows: the sidebar itself scrolls rather than
+   squeezing the list to a sliver. */
+@media (min-width: 992px) {
+  .sidebar-inner { overflow-y: auto; overscroll-behavior: contain; }
+  .recent { min-height: 200px; }
+  .sidebar-foot { position: sticky; bottom: 0; background: var(--sm-panel); }
+}
 .recent-head { display: flex; justify-content: space-between; align-items: center; padding: 0 12px 6px; font-size: .78rem; color: var(--sm-muted); font-weight: 600; }
 .recent-head .btn-link { font-size: .75rem; color: var(--sm-muted); }
 .search-wrap { position: relative; }
@@ -168,7 +175,18 @@ body {
 @media (hover: none) { .chat-item .btn-icon { opacity: .7; } }
 .chat-list-empty { color: var(--sm-muted); font-size: .84rem; padding: 6px 12px; }
 
-.sidebar-foot { border-top: 1px solid var(--sm-rule); padding-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.sidebar-foot { border-top: 1px solid var(--sm-rule); padding-top: 6px; display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+
+/* Phones: the menu scrolls as one column so the chat list is never squeezed to a sliver,
+   with the footer kept in view. */
+@media (max-width: 991.98px) {
+  .sidebar-inner { overflow-y: auto; overscroll-behavior: contain; }
+  .sidebar-head, .btn-new-chat, .side-nav { flex-shrink: 0; }
+  .recent { flex: 0 0 auto; }
+  .chat-list { overflow: visible; flex: none; }
+  .recent .search-wrap { position: sticky; top: 0; z-index: 2; background: var(--sm-panel); padding-bottom: 2px; }
+  .sidebar-foot { position: sticky; bottom: calc(-1 * env(safe-area-inset-bottom, 0px)); background: var(--sm-panel); padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -8px 12px -10px rgba(0, 0, 0, .5); }
+}
 .model-pill { display: flex; align-items: center; gap: 8px; font-size: .76rem; color: var(--sm-muted); padding: 2px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .model-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--sm-muted); flex-shrink: 0; }
 .model-pill.ok .dot { background: var(--sm-green); }
@@ -820,3 +838,10 @@ button.concept-chip { cursor: pointer; }
 .data-status.warn i { color: var(--sm-amber); }
 .backup-line { display: flex; align-items: center; gap: 8px; padding: 4px 8px; font-size: .78rem; color: var(--sm-muted); text-decoration: none; }
 .sidebar.collapsed .backup-line .label, .sidebar.collapsed #pillBackup .label { display: none; }
+
+/* start-up problem banner */
+.app-banner { position: relative; z-index: 1090; flex-shrink: 0; display: flex; gap: 10px; align-items: center; padding: 10px 14px calc(10px + env(safe-area-inset-top, 0px)); background: var(--sm-amber-soft); border-bottom: 1px solid color-mix(in srgb, var(--sm-amber) 45%, transparent); color: var(--sm-ink); font-size: .85rem; }
+.app-banner[hidden] { display: none; }
+.app-banner i { font-size: 1.2rem; color: var(--sm-amber); }
+body.has-banner { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+body.has-banner .app-shell { height: auto; flex: 1; min-height: 0; padding-top: 0; }

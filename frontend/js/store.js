@@ -6,7 +6,10 @@
  */
 const DB_NAME = 'smartmedicinelm';
 const VERSION = 3;
+const OPEN_TIMEOUT = 8000;
+const RETRY_AFTER = 5000; // after a failure, fail fast for a moment so pages can explain themselves
 let dbPromise;
+let lastFailure = null;
 
 export const STORES = ['chats', 'messages', 'documents', 'files', 'chunks', 'flashcards', 'questions', 'blocks', 'attempts', 'mastery', 'graph', 'reviews', 'vectors', 'boards', 'outbox', 'meta'];
 /** Stores mirrored to the server. Raw files and embedding vectors stay on the device. */
@@ -14,6 +17,7 @@ export const SYNCED = new Set(['chats', 'messages', 'documents', 'chunks', 'flas
 
 function open() {
   if (dbPromise) return dbPromise;
+  if (lastFailure && Date.now() - lastFailure.at < RETRY_AFTER) return Promise.reject(lastFailure.err);
   dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, VERSION);
     req.onupgradeneeded = (e) => {
@@ -44,13 +48,39 @@ function open() {
         db.createObjectStore('meta', { keyPath: 'id' });
       }
     };
-    req.onblocked = () => console.warn('Database upgrade waiting for other tabs to close.');
+    let blocked = false;
+    let settled = false;
+    const finish = (fn, arg) => {
+      if (settled) return;
+      settled = true;
+      fn(arg);
+    };
+    req.onblocked = () => {
+      // Another tab still holds an older version of the database open.
+      blocked = true;
+      if (typeof document !== 'undefined') document.dispatchEvent(new CustomEvent('storage:blocked'));
+    };
     req.onsuccess = () => {
       const db = req.result;
       db.onversionchange = () => db.close(); // let a newer tab upgrade the schema
-      resolve(db);
+      lastFailure = null;
+      if (blocked && typeof document !== 'undefined') document.dispatchEvent(new CustomEvent('storage:unblocked'));
+      finish(resolve, db);
     };
-    req.onerror = () => reject(req.error);
+    req.onerror = () => {
+      dbPromise = null;
+      lastFailure = { at: Date.now(), err: req.error };
+      finish(reject, req.error || new Error('Storage could not be opened.'));
+    };
+    // Never hang the app: if the database cannot be opened, fail loudly and allow a retry.
+    setTimeout(() => {
+      if (settled) return;
+      dbPromise = null;
+      const err = new Error(blocked ? 'STORAGE_BLOCKED' : 'STORAGE_TIMEOUT');
+      err.blocked = blocked;
+      lastFailure = { at: Date.now(), err };
+      finish(reject, err);
+    }, OPEN_TIMEOUT);
   });
   return dbPromise;
 }
