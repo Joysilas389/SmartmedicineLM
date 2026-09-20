@@ -16,7 +16,7 @@ let lastRequest = null;
 const BRAND_SVG = document.querySelector('.brand-mark')?.innerHTML || '';
 const MODE_LABEL = { auto: 'Auto', learn: 'Learn', review: 'Review', recall: 'Active recall' };
 const KNOW_LABEL = { hybrid: 'Hybrid', library: 'My library', general: 'General' };
-const TAG_LABEL = { learn: 'Learn', review: 'Review', recall: 'Active recall', concise: 'Direct answer', standard: 'Explain', image: 'Image' };
+const TAG_LABEL = { learn: 'Learn', review: 'Review', recall: 'Active recall', concise: 'Direct answer', standard: 'Explain', image: 'Image', continue: 'Continued' };
 
 export function currentChat() {
   return state.chats.find((c) => c.id === state.currentChatId) || null;
@@ -575,6 +575,12 @@ async function onThreadClick(e) {
     act.disabled = true;
     act.innerHTML = `<i class="bi bi-check2 me-1"></i>Added ${n}`;
     toast(`${n} card${n === 1 ? '' : 's'} added to your deck.`, 'success');
+  } else if (act.dataset.action === 'continue') {
+    if (state.streaming) return;
+    act.disabled = true;
+    els.input.value = 'Continue';
+    autosize();
+    send();
   } else if (act.dataset.action === 'retry' && lastRequest) {
     act.closest('.msg').remove();
     const { chat, userMsg, images, pinned } = lastRequest;

@@ -1,4 +1,4 @@
-import { ProviderError, sseToText, streamToString, upstreamError, postWithFallback } from './base.js';
+import { ProviderError, sseToText, streamToString, upstreamError, postWithFallback, TRUNCATION_MARK } from './base.js';
 
 /**
  * Works with any OpenAI-compatible Chat Completions API:
@@ -47,7 +47,7 @@ export function createOpenAICompatibleProvider(env) {
       const choice = evt.choices?.[0];
       let text = choice?.delta?.content || '';
       if (choice?.finish_reason === 'length')
-        text += '\n\n> [!NOTE]\n> This answer reached the length limit. Ask me to "continue" to get the rest.';
+        text += TRUNCATION_MARK;
       return text;
     });
   }

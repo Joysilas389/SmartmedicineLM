@@ -20,7 +20,7 @@ export const DEFAULT_POLICY = Object.freeze({
   ghana_context: false,
 });
 
-export const MODES = ['learn', 'review', 'recall', 'concise', 'standard', 'image'];
+export const MODES = ['learn', 'review', 'recall', 'concise', 'standard', 'image', 'continue'];
 export const DEPTHS = ['quick', 'standard', 'deep', 'comprehensive'];
 export const KNOWLEDGE_MODES = ['hybrid', 'library', 'general'];
 
@@ -33,6 +33,7 @@ export const SOURCE_LOCKED_MESSAGE =
  */
 export function detectIntent(text = '', hasImages = false) {
   const t = text.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (/^(please )?(continue|carry on|keep going|go on)\b/.test(t) && t.split(' ').length <= 12) return 'continue';
   if (/\b(test|quiz|examine|drill|grill) me\b|\bask me (some |a few )?questions\b|\bactive recall\b/.test(t)) return 'recall';
   if (/absolute zero|from zero|from scratch|know nothing|from the (very )?(beginning|start)|first principles|\bteach me\b/.test(t)) return 'learn';
   if (/\b\d+[- ]?min(ute)?s?\b|\bquick (review|recap|summary)\b|\brecap\b|\breview\b|\brevise\b|\bsummar(y|ise|ize)\b|\bhigh[- ]yield (points|facts)\b/.test(t)) return 'review';
@@ -55,13 +56,16 @@ export function resolvePolicy(overrides = {}) {
   return policy;
 }
 
+// Output budgets (tokens). Full lessons are long by design: a deep lesson with a
+// chain, a diagram, a case and flashcards needs well over 8k tokens.
 const TOKEN_BUDGET = {
-  concise: { quick: 500, standard: 800, deep: 1200, comprehensive: 1600 },
-  review: { quick: 1200, standard: 1800, deep: 2600, comprehensive: 3500 },
-  recall: { quick: 900, standard: 1200, deep: 1600, comprehensive: 2000 },
-  standard: { quick: 1200, standard: 2500, deep: 4000, comprehensive: 6000 },
-  image: { quick: 1200, standard: 2500, deep: 4000, comprehensive: 6000 },
-  learn: { quick: 3000, standard: 5000, deep: 7000, comprehensive: 8000 },
+  concise: { quick: 600, standard: 1000, deep: 1500, comprehensive: 2000 },
+  review: { quick: 1500, standard: 2500, deep: 4000, comprehensive: 6000 },
+  recall: { quick: 1000, standard: 1500, deep: 2500, comprehensive: 3000 },
+  standard: { quick: 1500, standard: 3000, deep: 6000, comprehensive: 9000 },
+  image: { quick: 1500, standard: 3000, deep: 6000, comprehensive: 9000 },
+  learn: { quick: 5000, standard: 8000, deep: 12000, comprehensive: 16000 },
+  continue: { quick: 8000, standard: 8000, deep: 12000, comprehensive: 16000 },
 };
 
 export function maxTokensFor(mode, depth) {
@@ -78,6 +82,8 @@ function modeInstructions(mode, depth, policy) {
   }[depth] || '';
 
   switch (mode) {
+    case 'continue':
+      return `MODE: CONTINUE. Your previous answer was cut off by the length limit. Continue exactly where it stopped, in the same format and depth. Do not repeat what was already written and do not restart the lesson. If it stopped inside a code block (a chain, mermaid diagram or flashcards), start that block again from its opening fence and write it completely.`;
     case 'learn':
       return `MODE: LEARN FROM ZERO. ${depthLine}
 Assume the learner may know nothing about this topic. Follow these layers in order, using them as "##" headings (skip any that truly do not apply to this topic):
@@ -210,7 +216,12 @@ export function sanitizeMessages(raw) {
   const out = [];
   for (const m of list) {
     const role = m?.role === 'assistant' ? 'assistant' : 'user';
-    const content = String(m?.content ?? '').slice(0, 24000);
+    let content = String(m?.content ?? '')
+      .replace(/\n*\[\[SM:TRUNCATED\]\]\s*$/, '')
+      .replace(/\n*> \[!NOTE\]\n> This answer reached the length limit\.[^\n]*\s*$/, '');
+    // Keep the END of long answers: a "continue" request needs to see where it stopped.
+    const cap = role === 'assistant' ? 60000 : 24000;
+    if (content.length > cap) content = role === 'assistant' ? `[…earlier part omitted…]\n${content.slice(-cap)}` : content.slice(0, cap);
     const msg = { role, content };
     if (role === 'user' && Array.isArray(m.images) && m.images.length) {
       msg.images = m.images

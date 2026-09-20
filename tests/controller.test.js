@@ -68,3 +68,12 @@ test('provider selection', () => {
   assert.equal(getProvider({ OPENAI_API_KEY: 'x' }).id, 'openai-compatible');
   assert.equal(getProvider({ MODEL_PROVIDER: 'groq', OPENAI_API_KEY: 'x' }).id, 'openai-compatible');
 });
+
+test('"Continue" gets its own mode with a large budget', async () => {
+  const { detectIntent, maxTokensFor } = await import('../ai/teacher/controller.js');
+  assert.equal(detectIntent('Continue'), 'continue');
+  assert.equal(detectIntent('please continue where you stopped'), 'continue');
+  assert.notEqual(detectIntent('continue the discussion of how continuous murmurs arise in a PDA and why they matter clinically today'), 'continue');
+  assert.ok(maxTokensFor('continue', 'deep') >= 12000);
+  assert.ok(maxTokensFor('learn', 'deep') >= 12000);
+});

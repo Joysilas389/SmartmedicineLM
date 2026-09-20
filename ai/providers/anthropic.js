@@ -1,4 +1,4 @@
-import { ProviderError, sseToText, streamToString, postWithFallback } from './base.js';
+import { ProviderError, sseToText, streamToString, postWithFallback, TRUNCATION_MARK } from './base.js';
 
 export function createAnthropicProvider(env) {
   const apiKey = env.ANTHROPIC_API_KEY;
@@ -31,7 +31,7 @@ export function createAnthropicProvider(env) {
     return sseToText(res.body, (evt) => {
       if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') return evt.delta.text;
       if (evt.type === 'message_delta' && evt.delta?.stop_reason === 'max_tokens')
-        return '\n\n> [!NOTE]\n> This answer reached the length limit. Ask me to "continue" to get the rest.';
+        return TRUNCATION_MARK;
       if (evt.type === 'error') return `\n\n⚠️ Model error: ${evt.error?.message || 'unknown error'}`;
       return '';
     });

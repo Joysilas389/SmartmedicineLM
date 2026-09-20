@@ -67,6 +67,9 @@ export async function streamToString(stream) {
   return out + decoder.decode();
 }
 
+/** Appended to a stream when the model hit its output limit; the client renders it as a Continue prompt. */
+export const TRUNCATION_MARK = '\n\n[[SM:TRUNCATED]]';
+
 export async function upstreamError(res, providerName) {
   let text = '';
   try {

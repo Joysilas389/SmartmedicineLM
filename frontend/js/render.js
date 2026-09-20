@@ -22,7 +22,7 @@ export function initMermaid() {
   mermaidReady = true;
 }
 
-if (window.marked) {
+if (globalThis.window?.marked) {
   window.marked.setOptions({ gfm: true, breaks: false });
 }
 
@@ -39,7 +39,35 @@ const CALLOUTS = {
  * Renders `text` into `el`. While streaming (final=false) heavy components show placeholders.
  * Returns { citedTags } for the citation validator.
  */
-export async function renderMessage(el, text, { final = false, sources = [] } = {}) {
+const TRUNC_RE = /\n*(\[\[SM:TRUNCATED\]\]|> \[!NOTE\]\n> This answer reached the length limit\.[^\n]*)\s*$/;
+const SPECIAL_BLOCKS = ['mermaid', 'chain', 'flashcards'];
+
+/**
+ * Handles answers cut off by the model's output limit: removes the marker, and
+ * if the cut happened inside a code block, closes it (or drops a half-written
+ * diagram/chain/deck, which cannot render) so the rest of the answer displays.
+ */
+export function prepareText(raw = '') {
+  let text = String(raw);
+  const truncated = TRUNC_RE.test(text) || text.includes('[[SM:TRUNCATED]]');
+  text = text.replace(TRUNC_RE, '').replace(/\[\[SM:TRUNCATED\]\]/g, '');
+  let cutBlock = null;
+  if (truncated) {
+    const fences = [...text.matchAll(/^ {0,3}```([\w-]*)/gm)];
+    if (fences.length % 2 === 1) {
+      const open = fences[fences.length - 1];
+      const lang = open[1].toLowerCase();
+      if (SPECIAL_BLOCKS.includes(lang)) {
+        text = text.slice(0, open.index).trimEnd();
+        cutBlock = lang;
+      } else text += '\n```';
+    }
+  }
+  return { text, truncated, cutBlock };
+}
+
+export async function renderMessage(el, raw, { final = false, sources = [] } = {}) {
+  const { text, truncated, cutBlock } = prepareText(raw);
   const html = window.marked ? window.marked.parse(text || '') : escapeHtml(text).replace(/\n/g, '<br>');
   el.innerHTML = window.DOMPurify ? window.DOMPurify.sanitize(html, { USE_PROFILES: { html: true } }) : html;
 
@@ -60,7 +88,16 @@ export async function renderMessage(el, text, { final = false, sources = [] } = 
     }
   }
   const citedTags = enhanceCitations(el, sources);
-  return { citedTags };
+  if (final && truncated) {
+    const what = { mermaid: 'a diagram', chain: 'a causal chain', flashcards: 'the flashcards' }[cutBlock];
+    const box = document.createElement('div');
+    box.className = 'callout callout-note truncated-note';
+    box.innerHTML = `<div class="callout-title"><i class="bi bi-scissors"></i>Answer cut off</div>
+      <p>This lesson reached the length limit${what ? ` while writing ${what}` : ''}. Continue to get the rest.</p>
+      <button class="btn btn-sm btn-primary" data-action="continue" type="button"><i class="bi bi-arrow-down-circle me-1"></i>Continue</button>`;
+    el.appendChild(box);
+  }
+  return { citedTags, truncated };
 }
 
 function pending(label) {
