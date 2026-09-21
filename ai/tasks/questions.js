@@ -110,7 +110,9 @@ export function buildQuestionRequest(body = {}) {
   return {
     system: systemPrompt(exam),
     messages: [{ role: 'user', content: lines.join('\n') }],
-    maxTokens: 700 + count * 1100,
+    // Each item carries five explained options, clues, a mechanism and a flashcard:
+    // detailed models use ~1,500 tokens per item, so leave generous headroom.
+    maxTokens: 1000 + count * 2000,
     temperature: 0.7,
     count,
     exam,

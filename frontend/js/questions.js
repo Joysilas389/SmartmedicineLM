@@ -17,7 +17,9 @@ import { addCards } from './flashcards.js';
 import { composeAndSend } from './chat.js';
 import { EXAMS, examKey, examShort, currentExam } from './exams.js';
 
-const BATCH = 5;
+const FIRST_BATCH = 2; // start answering sooner
+const BATCH = 3; // small batches never hit the length limit
+const MAX_EMPTY_BATCHES = 2;
 const SECONDS_PER_QUESTION = 90;
 let view = { name: 'home' }; // home | session | results
 let block = null; // active block record
@@ -312,14 +314,22 @@ async function generateInto(request, total) {
   const ac = new AbortController();
   generating = ac;
   let started = false;
+  let empty = 0;
+  let attempts = 0;
   try {
-    while (block.questionIds.length < total && !ac.signal.aborted) {
-      const need = Math.min(BATCH, total - block.questionIds.length);
+    while (block.questionIds.length < total && !ac.signal.aborted && attempts < total + 3) {
+      attempts++;
+      const need = Math.min(started ? BATCH : FIRST_BATCH, total - block.questionIds.length);
       const base = block.questionIds.length;
       const qs = await requestQuestions({ ...request, count: need }, ac.signal, (n) => {
         if (!started) renderGenerating(base + n, total);
       });
-      if (!qs.length) throw new Error('The questions could not be read. Please try again.');
+      if (!qs.length) {
+        // An empty or unreadable batch: try again once before giving up.
+        if (++empty >= MAX_EMPTY_BATCHES) throw new Error('The questions could not be read. Please try again.');
+        continue;
+      }
+      empty = 0;
       const srcMap = Object.fromEntries((request.sources || []).map((s) => [s.tag, { docId: s.docId, docName: s.docName, page: s.page }]));
       for (const q of qs) {
         q.blockId = block.id;
@@ -338,7 +348,7 @@ async function generateInto(request, total) {
         if (page().querySelector('.q-actions .spinner-border')) renderSession();
         else renderNav();
       }
-      if (qs.length < need) break; // model returned fewer valid items; don't loop forever
+      // A short batch (for example cut off by the length limit) just means we ask for the rest.
     }
   } catch (err) {
     if (err.name === 'AbortError') return;
