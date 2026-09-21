@@ -78,7 +78,7 @@ export function maxTokensFor(mode, depth) {
   return (TOKEN_BUDGET[mode] || TOKEN_BUDGET.standard)[d];
 }
 
-function modeInstructions(mode, depth, policy, imageKind = 'auto') {
+function modeInstructions(mode, depth, policy, imageKind = 'auto', exam = 'step1') {
   const depthLine = {
     quick: 'Keep it tight: the essentials only.',
     standard: 'Moderate length.',
@@ -92,7 +92,7 @@ function modeInstructions(mode, depth, policy, imageKind = 'auto') {
     case 'learn':
       return `MODE: LEARN FROM ZERO. ${depthLine}
 Assume the learner may know nothing about this topic. Follow these layers in order, using them as "##" headings (skip any that truly do not apply to this topic):
-${M.layersFor(policy).map((l) => `- ${l}`).join('\n')}`;
+${M.layersFor(policy, exam).map((l) => `- ${l}`).join('\n')}`;
     case 'review':
       return `MODE: REVIEW. The learner has met this topic before. ${depthLine}
 Skip basic foundations. Focus on the core mechanism (one chain block), high-yield patterns, the classic traps and distractors, and how to tell it apart from its nearest differential. If the learner asked for an N-minute review, size the answer so it can be read in that time. End with 2–3 quick recall questions without answers.`;
@@ -185,6 +185,7 @@ export function buildTeachingRequest(body = {}) {
 
   const depth = DEPTHS.includes(controls.depth) ? controls.depth : 'standard';
   const knowledgeMode = KNOWLEDGE_MODES.includes(controls.knowledgeMode) ? controls.knowledgeMode : 'hybrid';
+  const exam = M.examOf(controls.exam);
   const mode = resolveMode(controls, last.content, hasImages);
   const policy = resolvePolicy(controls.policy);
   const sources = knowledgeMode === 'general' ? [] : prepareSources(body.sources);
@@ -200,7 +201,8 @@ export function buildTeachingRequest(body = {}) {
   if (policy.mechanism_first) parts.push(M.MECHANISM);
   parts.push(M.COMMIT);
   if (policy.spatial_anchor && ['learn', 'standard', 'image'].includes(mode)) parts.push(M.SPATIAL_ANCHOR);
-  if (policy.step1_high_yield && !['recall', 'image_quiz'].includes(mode)) parts.push(M.STEP1);
+  if (!['image_quiz', 'continue'].includes(mode)) parts.push(M.examFocus(exam));
+  if (policy.step1_high_yield && !['recall', 'image_quiz'].includes(mode)) parts.push(M.examHighYield(exam));
   const wantsCards = /flash ?cards?/i.test(last.content);
   if (wantsCards || (policy.flashcards && (mode === 'learn' || (mode === 'standard' && depth === 'comprehensive')))) parts.push(M.FLASHCARDS);
   if (policy.active_recall && mode === 'learn') parts.push(M.ACTIVE_RECALL_END);
@@ -210,7 +212,7 @@ export function buildTeachingRequest(body = {}) {
   const imageTurn = mode === 'image' || mode === 'image_quiz' || mode === 'image_eval' || (hasImages && mode !== 'continue');
   if (imageTurn && mode !== 'image_quiz') parts.push(M.imageInstructions(imageKind));
   if (imageTurn) parts.push(M.IMAGE_SAFETY);
-  parts.push(modeInstructions(mode, depth, policy, imageKind));
+  parts.push(modeInstructions(mode, depth, policy, imageKind, exam));
   const prereq = M.prerequisiteInstructions(preparePrerequisites(body.prerequisites), mode);
   if (prereq && !['continue', 'recall', 'image_quiz', 'image_eval'].includes(mode)) parts.push(prereq);
   if (mode === 'learn' || (mode === 'standard' && (depth === 'deep' || depth === 'comprehensive'))) parts.push(M.CONCEPTS);
@@ -227,6 +229,7 @@ export function buildTeachingRequest(body = {}) {
     depth,
     policy,
     sources,
+    exam,
   };
 }
 

@@ -164,7 +164,7 @@ test('demo questions pass validation and options are shuffled', () => {
   let seed = 1;
   const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const qs = parseQuestions(JSON.stringify(DEMO_QUESTIONS), { rand });
-  assert.equal(qs.length, 3);
+  assert.equal(qs.length, DEMO_QUESTIONS.questions.length);
   for (const q of qs) {
     assert.equal(q.options.length, 5);
     assert.equal(q.options.filter((o) => o.correct).length, 1);

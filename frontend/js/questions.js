@@ -15,6 +15,7 @@ import { search } from './retrieval.js';
 import { renderMessage } from './render.js';
 import { addCards } from './flashcards.js';
 import { composeAndSend } from './chat.js';
+import { EXAMS, examKey, examShort, currentExam } from './exams.js';
 
 const BATCH = 5;
 const SECONDS_PER_QUESTION = 90;
@@ -23,7 +24,7 @@ let block = null; // active block record
 let bank = new Map(); // questionId -> question
 let timer = null;
 let generating = null; // AbortController
-let form = { source: 'topics', topic: '', system: '', count: 5, mode: 'tutor', difficulty: 'mixed', docId: '', sourceLocked: false };
+let form = { exam: null, source: 'topics', topic: '', system: '', count: 5, mode: 'tutor', difficulty: 'mixed', docId: '', sourceLocked: false };
 
 const page = () => $('#questionsPage');
 
@@ -85,6 +86,8 @@ async function renderHome() {
       </div>
       <div class="builder-body">${sourceFields(docs, unseen, missed.size)}</div>
       <div class="builder-grid">
+        <div><label class="form-label small" for="qExam">Exam</label>
+          <select class="form-select form-select-sm" id="qExam">${Object.entries(EXAMS).map(([k, v]) => `<option value="${k}" ${(form.exam || currentExam()) === k ? 'selected' : ''}>${v.short}</option>`).join('')}</select></div>
         <div><label class="form-label small" for="qCount">Questions</label>
           <select class="form-select form-select-sm" id="qCount">${[5, 10, 20].map((n) => `<option ${form.count === n ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
         <div><label class="form-label small" for="qMode">Mode</label>
@@ -172,6 +175,7 @@ function readForm() {
   form.topic = (v('#qTopic') ?? v('#qDocTopic') ?? form.topic ?? '').trim();
   form.system = v('#qSystem') ?? form.system;
   form.count = Number(v('#qCount') || form.count);
+  form.exam = examKey(v('#qExam') || form.exam || currentExam());
   form.mode = v('#qMode') || form.mode;
   form.difficulty = v('#qDiff') || form.difficulty;
   form.docId = v('#qDoc') || form.docId;
@@ -272,15 +276,18 @@ async function startBlock() {
       label = `${state.documents.find((d) => d.id === form.docId)?.title || 'Document'}${form.topic ? ` · ${form.topic}` : ''}`;
     }
     const recent = (await db.all('questions')).sort((a, b) => b.createdAt - a.createdAt).slice(0, 30).map((q) => q.stem.slice(0, 90));
-    request = { task: 'questions', topics, sources, sourceLocked: form.source === 'library' && form.sourceLocked, difficulty: form.difficulty, focusErrors, avoid: recent };
+    request = { task: 'questions', exam: form.exam || currentExam(), topics, sources, sourceLocked: form.source === 'library' && form.sourceLocked, difficulty: form.difficulty, focusErrors, avoid: recent };
   }
 
   for (const old of (await db.all('blocks')).filter((b) => b.status === 'active' && !Object.values(b.answers || {}).some((x) => x.chosen)))
     await db.del('blocks', old.id);
 
+  const exam = form.exam || currentExam();
+  if (exam !== 'step1') label = `${label} · ${examShort(exam)}`;
   block = {
     id: uid('blk'),
     createdAt: Date.now(),
+    exam,
     label,
     source: form.source,
     mode: form.mode,
@@ -316,6 +323,7 @@ async function generateInto(request, total) {
       const srcMap = Object.fromEntries((request.sources || []).map((s) => [s.tag, { docId: s.docId, docName: s.docName, page: s.page }]));
       for (const q of qs) {
         q.blockId = block.id;
+        q.exam = request.exam;
         q.sourceMap = srcMap;
         bank.set(q.id, q);
         block.questionIds.push(q.id);
@@ -651,7 +659,7 @@ async function renderReveal(host, q, a) {
         .join('')}</div>
     </section>
 
-    ${q.highYield ? `<div class="callout callout-highyield"><div class="callout-title"><i class="bi bi-bullseye"></i>Step 1 high yield</div><p>${escapeHtml(q.highYield)}</p></div>` : ''}
+    ${q.highYield ? `<div class="callout callout-highyield"><div class="callout-title"><i class="bi bi-bullseye"></i>${examShort(q.exam || 'step1')} high yield</div><p>${escapeHtml(q.highYield)}</p></div>` : ''}
 
     <div class="rv-foot">
       ${srcChips ? `<div class="chip-row">${srcChips}</div>` : ''}

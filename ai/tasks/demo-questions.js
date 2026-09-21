@@ -2,6 +2,7 @@
 export const DEMO_QUESTIONS = {
   questions: [
     {
+      exam: 'step1',
       concept: 'Nephrotic syndrome',
       system: 'Renal',
       difficulty: 'medium',
@@ -21,6 +22,7 @@ export const DEMO_QUESTIONS = {
       sources: [],
     },
     {
+      exam: 'step1',
       concept: 'Primary hyperaldosteronism',
       system: 'Endocrine',
       difficulty: 'medium',
@@ -40,6 +42,7 @@ export const DEMO_QUESTIONS = {
       sources: [],
     },
     {
+      exam: 'step1',
       concept: 'Diabetes mellitus and DKA',
       system: 'Endocrine',
       difficulty: 'hard',
@@ -56,6 +59,47 @@ export const DEMO_QUESTIONS = {
       high_yield: 'In DKA, serum potassium is often high but total body potassium is low; insulin therapy will drop serum K+, so replace it.',
       prerequisites: ['Insulin and glucose metabolism', 'Anion gap', 'Electrolyte physiology'],
       flashcard: { q: 'Why can a patient in DKA have hyperkalemia yet total body potassium depletion?', a: 'Insulin lack and hyperosmolality shift K+ out of cells, raising serum K+, while osmotic diuresis removes K+ from the body.' },
+      sources: [],
+    },
+
+    {
+      exam: 'step2ck',
+      concept: 'Myocardial infarction',
+      system: 'Cardiovascular',
+      difficulty: 'medium',
+      stem: 'A 58-year-old man is brought to the emergency department of a hospital with a cardiac catheterization laboratory 50 minutes after the onset of crushing substernal chest pain radiating to his jaw. He has hypertension and smokes cigarettes. Temperature is 37.0°C, pulse 96/min, respirations 20/min, blood pressure 138/84 mm Hg, and oxygen saturation 95% on room air. He is diaphoretic; the lungs are clear. An ECG shows 3-mm ST-segment elevation in leads II, III and aVF with ST depression in leads I and aVL. He has been given aspirin. Which of the following is the most appropriate next step in management?',
+      options: [
+        { text: 'Emergency percutaneous coronary intervention', correct: true, explanation: 'This is an inferior ST-elevation myocardial infarction. The diagnosis is made on the ECG, and every minute of occlusion costs myocardium. At a PCI-capable hospital, primary PCI is the preferred reperfusion strategy when it can be done within 90 minutes of first medical contact, which is the case here.' },
+        { text: 'Intravenous alteplase', correct: false, explanation: 'Fibrinolysis is the alternative when timely PCI is not available. With a catheterization laboratory on site, PCI restores flow more reliably and with less bleeding risk.', would_be_right_if: 'he were at a hospital without PCI and transfer for PCI would take more than 120 minutes, with no contraindication to fibrinolysis', trap: 'distractor_trap' },
+        { text: 'Measure serum troponin and repeat the ECG in 30 minutes', correct: false, explanation: 'Troponin is not needed to diagnose STEMI and waiting delays reperfusion. The ECG already makes the diagnosis.', would_be_right_if: 'the ECG showed no ST elevation, suggesting a non-ST-elevation acute coronary syndrome', trap: 'misread_clue' },
+        { text: 'CT coronary angiography', correct: false, explanation: 'CT coronary angiography is used to evaluate stable chest pain in low- to intermediate-risk patients, not an evolving STEMI.', would_be_right_if: 'he had stable chest pain with a normal ECG and negative troponins', trap: 'differential_confusion' },
+        { text: 'Exercise stress testing', correct: false, explanation: 'Stress testing is contraindicated in acute myocardial infarction and would only delay reperfusion.', would_be_right_if: 'he had stable exertional chest pain with a normal resting ECG', trap: 'knowledge_gap' },
+      ],
+      clues: ['ST elevation in II, III and aVF → inferior STEMI', 'Reciprocal ST depression in I and aVL supports true infarction', 'Symptom onset 50 minutes ago at a PCI-capable hospital → primary PCI'],
+      mechanism: 'Plaque rupture → occlusive coronary thrombus → transmural ischemia → ST elevation → myocardium dies with every minute → restore flow fastest (primary PCI) → myocardium salvaged',
+      high_yield: 'STEMI is diagnosed on the ECG: go straight to primary PCI if it can be done within 90 minutes; choose fibrinolysis if PCI is more than 120 minutes away.',
+      prerequisites: ['Myocardial infarction', 'Atherosclerosis'],
+      flashcard: { q: 'In a STEMI, when is fibrinolysis chosen over primary PCI?', a: 'When PCI cannot be performed within 120 minutes of first medical contact and there is no contraindication; it should then be given within 30 minutes of arrival.' },
+      sources: [],
+    },
+    {
+      exam: 'step3',
+      concept: 'Cancer screening',
+      system: 'Biostatistics, Ethics & Prevention',
+      difficulty: 'easy',
+      stem: 'A 52-year-old woman comes to the clinic for a health maintenance examination. She feels well. She had a colonoscopy at age 45 that was normal, with no polyps. She has no personal history of inflammatory bowel disease and no family history of colorectal cancer or polyps. She asks whether she needs colorectal cancer screening now. Which of the following is the most appropriate recommendation?',
+      options: [
+        { text: 'Repeat colonoscopy at age 55', correct: true, explanation: 'She is at average risk and her colonoscopy at 45 was normal. After a normal colonoscopy in an average-risk adult, the next one is due in 10 years, because the adenoma-to-carcinoma sequence usually takes about that long.' },
+        { text: 'Colonoscopy now', correct: false, explanation: 'Nothing in her history shortens the 10-year interval, so a colonoscopy now adds procedural risk without benefit.', would_be_right_if: 'she had a first-degree relative diagnosed with colorectal cancer before age 60, which calls for colonoscopy every 5 years', trap: 'knowledge_gap' },
+        { text: 'Annual fecal immunochemical testing starting now', correct: false, explanation: 'Stool testing is an alternative screening strategy, not an add-on; her normal colonoscopy already covers her for 10 years.', would_be_right_if: 'she had chosen stool-based screening instead of colonoscopy', trap: 'distractor_trap' },
+        { text: 'CT colonography now', correct: false, explanation: 'CT colonography is another screening option, but she is not due for screening.', would_be_right_if: 'she were due for screening and declined or could not undergo colonoscopy', trap: 'distractor_trap' },
+        { text: 'No further colorectal cancer screening is needed', correct: false, explanation: 'Average-risk screening continues to age 75; stopping at 52 would leave her unscreened for more than two decades.', would_be_right_if: 'she were over 85 years old', trap: 'knowledge_gap' },
+      ],
+      clues: ['Normal colonoscopy with no polyps at 45 → next due in 10 years', 'No family history or inflammatory bowel disease → average risk'],
+      mechanism: 'Adenoma → carcinoma usually takes about 10 years → a normal colonoscopy makes cancer within 10 years unlikely → next colonoscopy in 10 years',
+      high_yield: 'Average-risk colorectal cancer screening runs from 45 to 75; after a normal colonoscopy the next is in 10 years.',
+      prerequisites: ['Tumor suppressors and oncogenes'],
+      flashcard: { q: 'Why is the interval after a normal colonoscopy 10 years in an average-risk adult?', a: 'The adenoma-to-carcinoma sequence usually takes about 10 years, so a clean colon makes cancer within that time unlikely.' },
       sources: [],
     },
   ],

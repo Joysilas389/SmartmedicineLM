@@ -3,6 +3,7 @@
  * conventions (```chain, ```mermaid, ```flashcards, > [!MEMORY] callouts, [S#] citations);
  * this module turns them into the lesson components.
  */
+import { examShort } from './exams.js';
 import { escapeHtml } from './ui.js';
 import { validateMermaid } from './validators.js';
 
@@ -28,7 +29,7 @@ if (globalThis.window?.marked) {
 
 const CALLOUTS = {
   MEMORY: { cls: 'memory', icon: 'bi-bookmark-star', title: 'Commit to memory' },
-  HIGHYIELD: { cls: 'highyield', icon: 'bi-lightning-charge', title: 'Step 1 high yield' },
+  HIGHYIELD: { cls: 'highyield', icon: 'bi-lightning-charge', get title() { return `${examShort()} high yield`; } },
   ANCHOR: { cls: 'anchor', icon: 'bi-geo-alt', title: 'Spatial anchor' },
   CLINICAL: { cls: 'clinical', icon: 'bi-heart-pulse', title: 'Clinical pearl' },
   NOTE: { cls: 'note', icon: 'bi-info-circle', title: 'Note' },

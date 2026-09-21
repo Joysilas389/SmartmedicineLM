@@ -1,5 +1,5 @@
 /*
- * Seed knowledge graph (spec §29–30): core USMLE Step 1 concepts, their prerequisites
+ * Seed knowledge graph (spec §29–30): core USMLE Step 1, Step 2 CK and Step 3 concepts, their prerequisites
  * and key clinical relationships. The graph grows at runtime: every full lesson returns a
  * small structured block of concepts/relations that is merged in (see graph.js).
  *
@@ -104,6 +104,28 @@ Reproductive & Musculoskeletal | Osteoporosis vs osteomalacia | osteoporosis, os
 Reproductive & Musculoskeletal | Gout | hyperuricemia, uric acid | Acute inflammation | diagnosed_by>Negatively birefringent crystals
 Reproductive & Musculoskeletal | Rheumatoid arthritis | ra, rheumatoid | Chronic inflammation; Hypersensitivity reactions |
 Reproductive & Musculoskeletal | Muscle contraction | excitation-contraction coupling, sarcomere, cross-bridge cycle | Action potential; Neuromuscular junction |
+Cardiovascular | STEMI management | primary pci, fibrinolysis, thrombolysis, reperfusion therapy | Myocardial infarction | treated_by>Primary PCI; treated_by>Fibrinolysis when PCI is delayed
+Microbiology & Infectious disease | Sepsis management | septic shock management, sepsis bundle | Sepsis | treated_by>Early broad-spectrum antibiotics; treated_by>Intravenous crystalloid; treated_by>Norepinephrine if hypotension persists
+Reproductive & Musculoskeletal | Prenatal care | antenatal care, prenatal screening, pregnancy care | Menstrual cycle hormones |
+Psychiatry | Neurotransmitters and psychopharmacology | serotonin, dopamine, norepinephrine, antidepressants, ssris, ssri | Receptor signaling |
+Psychiatry | Major depressive disorder | mdd, major depression, depressive disorder | Neurotransmitters and psychopharmacology | presents_with>Low mood or anhedonia for at least 2 weeks; treated_by>SSRIs; treated_by>Psychotherapy; associated_with>Suicide risk assessment
+Psychiatry | Bipolar disorder | mania, hypomania, bipolar i disorder, bipolar ii disorder | Neurotransmitters and psychopharmacology | treated_by>Lithium; differential_of>Major depressive disorder
+Psychiatry | Schizophrenia | psychosis, hallucinations, delusions, schizoaffective disorder | Neurotransmitters and psychopharmacology | treated_by>Second-generation antipsychotics
+Psychiatry | Anxiety disorders | generalized anxiety disorder, panic disorder, panic attack | Neurotransmitters and psychopharmacology | treated_by>SSRIs; treated_by>Cognitive behavioural therapy
+Psychiatry | Substance use and withdrawal | alcohol withdrawal, delirium tremens, opioid withdrawal, opioid overdose, substance use disorder | Neurotransmitters and psychopharmacology | treated_by>Benzodiazepines for alcohol withdrawal; treated_by>Naloxone for opioid overdose
+Psychiatry | Delirium and dementia | delirium, dementia, alzheimer disease, neurocognitive disorder | | differential_of>Major depressive disorder
+Psychiatry | Suicide risk assessment | suicide, suicidal ideation, self-harm | Major depressive disorder |
+Psychiatry | Eating disorders | anorexia nervosa, bulimia nervosa, binge eating disorder | | causes>Refeeding syndrome risk
+Biostatistics, Ethics & Prevention | Sensitivity and specificity | positive predictive value, negative predictive value, ppv, npv, 2x2 table | |
+Biostatistics, Ethics & Prevention | Study designs | cohort study, case-control study, randomized controlled trial, rct, cross-sectional study | |
+Biostatistics, Ethics & Prevention | Bias and confounding | confounding, selection bias, lead-time bias, recall bias | Study designs |
+Biostatistics, Ethics & Prevention | Hypothesis testing | p value, confidence interval, type i error, type ii error, statistical power | Study designs |
+Biostatistics, Ethics & Prevention | Risk measures | relative risk, odds ratio, absolute risk reduction, number needed to treat, nnt | Study designs |
+Biostatistics, Ethics & Prevention | Informed consent and capacity | informed consent, decision-making capacity, surrogate decision maker | |
+Biostatistics, Ethics & Prevention | Confidentiality and disclosure | confidentiality, hipaa, disclosure of medical errors, duty to warn | |
+Biostatistics, Ethics & Prevention | Patient safety and quality | medical error, root cause analysis, quality improvement, patient safety | |
+Biostatistics, Ethics & Prevention | Cancer screening | colorectal cancer screening, breast cancer screening, cervical cancer screening, lung cancer screening, uspstf | Tumor suppressors and oncogenes |
+Biostatistics, Ethics & Prevention | Adult vaccination | vaccines, vaccination, immunization schedule | Innate vs adaptive immunity |
 `;
 
 export const SYSTEMS = [
@@ -119,6 +141,8 @@ export const SYSTEMS = [
   'Microbiology & Infectious disease',
   'Pharmacology',
   'Reproductive & Musculoskeletal',
+  'Psychiatry',
+  'Biostatistics, Ethics & Prevention',
 ];
 
 export const RELATION_TYPES = ['causes', 'caused_by', 'inhibits', 'activates', 'associated_with', 'presents_with', 'diagnosed_by', 'treated_by', 'differential_of'];

@@ -37,7 +37,9 @@ export default async function handler(req) {
   const provider = getProvider(process.env);
 
   if (provider.id === 'demo') {
-    const sample = { questions: DEMO_QUESTIONS.questions.slice(0, request.count) };
+    // Demo mode: items written for the chosen exam first.
+    const ordered = [...DEMO_QUESTIONS.questions].sort((a, b) => (b.exam === request.exam) - (a.exam === request.exam));
+    const sample = { questions: ordered.slice(0, request.count).map(({ exam, ...q }) => q) };
     return new Response(JSON.stringify(sample), { headers: { ...headers, 'x-provider': 'demo' } });
   }
 

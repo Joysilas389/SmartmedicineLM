@@ -2,6 +2,7 @@
 import { accountSectionHtml, accountAction } from './account.js';
 import { semanticStatus } from './embeddings.js';
 import { dataSectionHtml, dataAction } from './data-ui.js';
+import { EXAMS } from './exams.js';
 import { state, saveSettings, resetSettings, POLICY_TOGGLES } from './state.js';
 import { db } from './store.js';
 import { $, escapeHtml, toast, confirmDialog } from './ui.js';
@@ -65,6 +66,8 @@ export function renderSettings() {
 
     <section class="settings-section">
       <h3>Teaching</h3>
+      ${row('setExam', 'Exam you are preparing for', 'Changes what lessons and questions emphasise. ' + (EXAMS[s.exam] || EXAMS.step1).hint + '.',
+        select('setExam', s.exam || 'step1', Object.entries(EXAMS).map(([k, v]) => [k, v.label])))}
       ${row('setMode', 'Response mode', 'Auto adapts to how you ask (short question, from zero, review, test me).',
         select('setMode', s.mode, [['auto', 'Auto'], ['learn', 'Learn'], ['review', 'Review'], ['recall', 'Active recall']]))}
       ${row('setDepth', 'Default depth', 'Used when a full lesson is requested.',
@@ -128,6 +131,10 @@ export function renderSettings() {
   page.querySelectorAll('[data-data]').forEach((b) => b.addEventListener('click', () => dataAction(b.dataset.data, renderSettings)));
   page.querySelector('#restoreFile')?.addEventListener('change', (e) => dataAction('restore', renderSettings, e.target.files?.[0]));
   on('setSched', 'change', (e) => saveSettings({ scheduler: e.target.value }));
+  on('setExam', 'change', (e) => {
+    saveSettings({ exam: e.target.value });
+    renderSettings();
+  });
   on('setTheme', 'change', (e) => {
     saveSettings({ theme: e.target.value });
     applyTheme();

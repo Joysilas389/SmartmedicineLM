@@ -3,25 +3,33 @@
  * USMLE-style single-best-answer vignettes as strict JSON. The browser parses,
  * validates and shuffles them (frontend/js/question-parse.js).
  */
-import { SYSTEMS } from '../teacher/modules.js';
+import { SYSTEMS, EXAMS, examOf } from '../teacher/modules.js';
 import { prepareSources } from '../teacher/controller.js';
 
 export const DIFFICULTIES = ['mixed', 'easy', 'medium', 'hard'];
 const TRAPS = ['differential_confusion', 'distractor_trap', 'mechanism_gap', 'knowledge_gap', 'recognition_failure', 'misread_clue', 'calculation_error'];
 
-const SYSTEM_PROMPT = `You are SmartMedicineLM's examiner: a senior USMLE Step 1 item writer and medical educator.
-You write single-best-answer clinical vignettes that test reasoning (clue → mechanism → diagnosis → prediction), never blind keyword matching or trivia.
+const EXAM_ITEMS = {
+  step1: `Target exam: USMLE Step 1. Test reasoning clue → mechanism → diagnosis → prediction: mechanisms, pathophysiology, pharmacology mechanisms, "what would you expect", and underlying cause. Avoid pure trivia.`,
+  step2ck: `Target exam: USMLE Step 2 CK. Test clinical decision-making: most likely diagnosis, NEXT BEST STEP in management, most appropriate diagnostic test, most appropriate pharmacotherapy, most likely complication, screening and prevention. At most one question in five may be a pure mechanism question. Give the setting (emergency department, clinic, ward) and full vital signs; include unstable patients where appropriate, where the right answer is to stabilise first. Options for "next best step" questions must all be reasonable actions a clinician might take. Follow mainstream current US practice.`,
+  step3: `Target exam: USMLE Step 3. Test independent practice: management over time (the vignette may describe the course after an initial intervention and ask what to do now), disposition (admit, ICU, discharge), monitoring and follow-up, prevention, screening and vaccination, ethics and communication (consent, capacity, confidentiality, disclosure, surrogates), patient safety, and applied biostatistics and epidemiology (you may describe a small study or give a 2 × 2 table in words and ask for sensitivity, NNT, the type of bias, and so on). Follow mainstream current US practice.`,
+};
+
+function systemPrompt(exam) {
+  const e = EXAMS[exam];
+  return `You are SmartMedicineLM's examiner: a senior ${e.label} item writer and medical educator.
+You write single-best-answer clinical vignettes that test reasoning, never blind keyword matching or trivia.
+${EXAM_ITEMS[exam]}
 
 Item-writing rules:
-- Each stem is a realistic vignette: age, sex, presentation, relevant history, vital signs, examination and, where useful, laboratory values WITH units and normal ranges when they are not standard. The final sentence is the question (e.g. "Which of the following is the most likely underlying mechanism?").
-- Exactly 5 options. Exactly one is correct. All options are the same kind of thing (all diagnoses, all mechanisms, all drugs…), similar length, and plausible.
+- Each stem is a realistic vignette: age, sex, presentation, relevant history, vital signs, examination and, where useful, laboratory values WITH units and normal ranges when they are not standard. The final sentence is the question (e.g. "Which of the following is the most appropriate next step in management?").
+- Exactly 5 options. Exactly one is correct. All options are the same kind of thing (all diagnoses, all actions, all drugs…), similar length, and plausible.
 - No "all of the above", "none of the above", or negatively worded questions ("EXCEPT").
-- Prefer mechanism, next-step reasoning and "what would you expect" questions over pure recall.
 - NEVER refer to options by letter anywhere (options are shuffled afterwards). Refer to an option by its content.
 - Medical content must be accurate and consistent with standard US teaching.
 
 For every option give an explanation:
-- correct option: why it is right, mechanistically, in 2–4 sentences.
+- correct option: why it is right in 2–4 sentences (for management questions: why this step, why now).
 - each wrong option: why it is wrong for THIS patient, and "would_be_right_if": the finding or change to the vignette that would make it the right answer.
 - each wrong option also gets "trap": the kind of mistake choosing it usually reflects, one of: ${TRAPS.join(', ')}.
 
@@ -36,13 +44,14 @@ Output ONLY valid JSON (no markdown fences, no commentary) of this shape:
    {"text": "...", "correct": false, "explanation": "...", "would_be_right_if": "...", "trap": "differential_confusion"}
  ],
  "clues": ["key clue in the stem → what it points to", "..."],
- "mechanism": "one causal chain written as: step → step → step",
- "high_yield": "one-sentence Step 1 takeaway",
+ "mechanism": "one causal chain written as: step → step → step${exam === 'step1' ? '' : ' (for management questions, the decision chain: finding → diagnosis → risk → action)'}",
+ "high_yield": "one-sentence ${e.short} takeaway",
  "prerequisites": ["concepts a learner must understand to answer this"],
- "flashcard": {"q": "mechanism question that requires reconstruction", "a": "concise mechanistic answer"},
+ "flashcard": {"q": "question that requires reconstruction${exam === 'step1' ? '' : ' or a management decision'}", "a": "concise answer with the reason"},
  "sources": ["S1"]
 }]}
 Strict JSON: double quotes, no trailing commas, no comments.`;
+}
 
 function cleanList(list, max, len = 80) {
   return (Array.isArray(list) ? list : [])
@@ -65,6 +74,7 @@ export function buildQuestionRequest(body = {}) {
   const focusErrors = cleanList(body.focusErrors, 4, 40).filter((e) => TRAPS.includes(e) || e === 'recall_failure');
 
   if (!topics.length && !sources.length) return { error: 'Choose at least one topic or document.' };
+  const exam = examOf(body.exam);
 
   const lines = [];
   lines.push(`Write ${count} question${count === 1 ? '' : 's'}.`);
@@ -98,10 +108,11 @@ export function buildQuestionRequest(body = {}) {
   }
 
   return {
-    system: SYSTEM_PROMPT,
+    system: systemPrompt(exam),
     messages: [{ role: 'user', content: lines.join('\n') }],
     maxTokens: 700 + count * 1100,
     temperature: 0.7,
     count,
+    exam,
   };
 }

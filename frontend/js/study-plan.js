@@ -117,7 +117,7 @@ export function buildPlan(input, { graph, records, systems, dueForecast = [], no
   }
 
   return {
-    exam: input.exam || 'USMLE Step 1',
+    exam: input.exam || 'USMLE exam',
     daysLeft,
     hours,
     phase,

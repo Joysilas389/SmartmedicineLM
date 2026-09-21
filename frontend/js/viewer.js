@@ -1,4 +1,5 @@
 /* Document viewer (spec §10): thumbnails, navigation, zoom, search, selectable text, page actions. */
+import { examShort } from './exams.js';
 import { state } from './state.js';
 import { db } from './store.js';
 import { $, $$, escapeHtml, toast, debounce } from './ui.js';
@@ -272,13 +273,13 @@ export async function imageFromLibrary(doc) {
 const PROMPTS = {
   explain: 'Explain this page to me from first principles.',
   teach: 'Teach me the topic on this page from absolute zero.',
-  questions: 'Write 3 USMLE Step 1-style questions based on this page. Give each as a clinical vignette with options A–E. Do not reveal the answers until I reply with mine.',
+  get questions() { return `Write 3 USMLE ${examShort()}-style questions based on this page. Give each as a clinical vignette with options A–E. Do not reveal the answers until I reply with mine.`; },
   flashcards: 'Create 6–8 mechanism-based flashcards from this page.',
 };
 const IMAGE_PROMPTS = {
   explain: 'Explain this image from absolute zero.',
   teach: 'Teach me the concept shown in this image from absolute zero.',
-  questions: 'Write 3 USMLE Step 1-style questions based on this image. Do not reveal the answers until I reply with mine.',
+  get questions() { return `Write 3 USMLE ${examShort()}-style questions based on this image. Do not reveal the answers until I reply with mine.`; },
   flashcards: 'Create 6–8 mechanism-based flashcards from this image.',
 };
 

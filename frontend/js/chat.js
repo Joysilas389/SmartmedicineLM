@@ -462,6 +462,7 @@ async function runAssistant(chat, userMsg, images, pinned) {
       mode: s.mode,
       depth: s.depth,
       knowledgeMode: s.knowledgeMode,
+      exam: s.exam || 'step1',
       temperature: s.temperature,
       policy: { ...s.policy, ghana_context: s.ghanaContext },
       imageKind: userMsg.imageKind || imageSource?.imageKind || 'auto',

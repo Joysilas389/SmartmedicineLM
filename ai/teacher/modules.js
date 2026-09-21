@@ -19,7 +19,7 @@ ACE inhibition :: the enzyme that makes angiotensin II is blocked
 \`\`\`
 - Callouts: a blockquote whose first line is one of these tags:
   > [!MEMORY]      for foundation facts that cannot reasonably be derived (shown as "Commit to memory")
-  > [!HIGHYIELD]   for Step 1 high-yield points
+  > [!HIGHYIELD]   for exam high-yield points
   > [!ANCHOR]      for a spatial anchor / physical mental model
   > [!CLINICAL]    for bedside pearls or warnings
   > [!NOTE]        for anything else worth isolating
@@ -41,7 +41,31 @@ export const MECHANISM = `Mechanisms must be causal: "because X, therefore Y, wh
 
 export const SPATIAL_ANCHOR = `For each genuinely difficult concept, give one physical mental model in an [!ANCHOR] callout that begins "Your spatial anchor for this is:" (pipes, filters, gates, pumps, locks, factories, roads, checkpoints, warehouses, circuits, traffic).`;
 
-export const STEP1 = `Step 1 high-yield points go in [!HIGHYIELD] callouts with four short parts, each on its own line in bold labels: **The fact**, **Why it is true**, **Common distractor**, **Why the distractor is wrong**. Teach the chain clue → mechanism → diagnosis → prediction, never blind keyword matching.`;
+/* ---------------------------------------------------------------------------
+ * Target exam. The teaching philosophy (reasoning over recall) is the same for all
+ * three; what changes is what the reasoning is FOR.
+ * ------------------------------------------------------------------------- */
+export const EXAMS = {
+  step1: { label: 'USMLE Step 1', short: 'Step 1' },
+  step2ck: { label: 'USMLE Step 2 CK', short: 'Step 2 CK' },
+  step3: { label: 'USMLE Step 3', short: 'Step 3' },
+};
+export const examOf = (exam) => (EXAMS[exam] ? exam : 'step1');
+
+const EXAM_FOCUS = {
+  step1: `TARGET EXAM: USMLE Step 1 (basic science applied to medicine). Emphasise mechanisms, pathophysiology, pharmacological mechanisms and the chain clue → mechanism → diagnosis → prediction.`,
+  step2ck: `TARGET EXAM: USMLE Step 2 CK (clinical knowledge). Keep mechanisms brief: enough to make each clinical decision logical. Put the weight on: the most likely diagnosis from a presentation; the diagnostic approach (which test first and why, the confirmatory test, when imaging is indicated); the NEXT BEST STEP at each point; stabilising an unstable patient first (airway, breathing, circulation) before diagnosis or definitive treatment; first-line versus alternative treatment and what makes you choose each; contraindications that change management; complications to anticipate; screening and prevention; special populations (pregnancy, children, older adults). Distinguish "next best step" from "definitive treatment". Follow mainstream current US practice and name the guideline body when relevant (for example USPSTF, ACC/AHA, ADA, ACOG); if you are not sure a recommendation is still current, say so.`,
+  step3: `TARGET EXAM: USMLE Step 3 (independent practice). Emphasise management over time and across settings: initial management in the emergency department, ward or clinic; disposition (admit, ICU, observe, discharge) and why; what to monitor and when to reassess; what to do when the patient does not improve; long-term follow-up; prevention, screening and vaccination; counselling; ethics and law (consent, capacity, confidentiality, disclosure of errors, surrogate decisions); patient safety and quality; biostatistics and epidemiology applied to reading studies; cost-conscious care. For case teaching, think like the Computer-based Case Simulations: which orders to write first, where the patient should be, how the case evolves over time, and what completes the case. Follow mainstream current US practice; if you are not sure a recommendation is still current, say so.`,
+};
+export const examFocus = (exam) => EXAM_FOCUS[examOf(exam)];
+
+const EXAM_HIGH_YIELD = {
+  step1: `High-yield points go in [!HIGHYIELD] callouts with four short parts, each on its own line with bold labels: **The fact**, **Why it is true**, **Common distractor**, **Why the distractor is wrong**. Teach the chain clue → mechanism → diagnosis → prediction, never blind keyword matching.`,
+  step2ck: `High-yield points go in [!HIGHYIELD] callouts with four short parts, each on its own line with bold labels: **The clue**, **Next best step**, **Why this step first**, **The tempting wrong step and why it is wrong**. Teach the chain presentation → diagnosis → decision, never blind keyword matching.`,
+  step3: `High-yield points go in [!HIGHYIELD] callouts with four short parts, each on its own line with bold labels: **The situation**, **The management decision**, **Why now and in this setting**, **The common error and its consequence**.`,
+};
+export const examHighYield = (exam) => EXAM_HIGH_YIELD[examOf(exam)];
+export const STEP1 = EXAM_HIGH_YIELD.step1; // kept for compatibility
 
 export const COMMIT = `Classify knowledge silently before teaching: things that must be understood get mechanisms; true foundation facts that cannot be derived go in [!MEMORY] callouts.`;
 
@@ -56,7 +80,9 @@ export const SAFETY = `You are an educational tool. If the learner describes a r
 
 export const GHANA = `Where it adds value, add a short "In a resource-limited setting" note (for example Ghana): affordable investigations, delayed presentations, common local differentials, practical constraints. Keep standard USMLE teaching unchanged.`;
 
-export function layersFor(policy) {
+export function layersFor(policy, exam = 'step1') {
+  exam = examOf(exam);
+  const clinical = exam !== 'step1';
   const layers = [];
   if (policy.prerequisite_detection)
     layers.push('Before we start — list the 2–4 prerequisite ideas this topic depends on and review each in one or two plain sentences');
@@ -65,10 +91,22 @@ export function layersFor(policy) {
   if (policy.mechanism_first) layers.push('Layer 2 · The full mechanism (causal chain block, plus a Mermaid diagram if helpful)');
   if (policy.timeline) layers.push('Layer 3 · Timeline: trigger → molecular event → cellular → physiological → compensation → symptoms → lab changes → complications');
   if (policy.clinical_case) layers.push('Layer 4 · The patient in front of you: a realistic vignette (history, vitals, exam, labs, imaging) then explain every finding mechanistically');
-  if (policy.investigation_mechanism) layers.push('Layer 5 · Investigations: for each test give Result, Why, and Clinical purpose');
-  if (policy.treatment_mechanism) layers.push('Layer 6 · Treatment: drug → target → molecular action → physiological effect → which broken step it fixes → benefit; plus key adverse effects, contraindications, monitoring, and why a distractor treatment would not work');
+  if (policy.investigation_mechanism)
+    layers.push(
+      clinical
+        ? 'Layer 5 · Diagnostic approach: which test first and why, the confirmatory test, what each result changes in management (a short algorithm)'
+        : 'Layer 5 · Investigations: for each test give Result, Why, and Clinical purpose'
+    );
+  if (policy.treatment_mechanism)
+    layers.push(
+      clinical
+        ? 'Layer 6 · Management: stabilise → first-line → alternatives → definitive, marking the NEXT BEST STEP at each branch; key contraindications and adverse effects that change the choice; one line on how the first-line drug works'
+        : 'Layer 6 · Treatment: drug → target → molecular action → physiological effect → which broken step it fixes → benefit; plus key adverse effects, contraindications, monitoring, and why a distractor treatment would not work'
+    );
   if (policy.differential_reasoning) layers.push('Layer 7 · Differentials: a table showing the first point where the pathways diverge');
-  if (policy.step1_high_yield) layers.push('USMLE reasoning: the key [!HIGHYIELD] points');
+  if (exam === 'step3')
+    layers.push('Layer 8 · Over time: disposition (admit, ICU, discharge), monitoring and reassessment, what if the patient does not improve, follow-up, prevention and counselling');
+  if (policy.step1_high_yield) layers.push(`${EXAMS[exam].short} reasoning: the key [!HIGHYIELD] points`);
   if (policy.flashcards) layers.push('Flashcards block');
   if (policy.active_recall) layers.push('Active recall prompts');
   return layers;
@@ -77,7 +115,7 @@ export function layersFor(policy) {
 export const SYSTEMS = [
   'Foundations', 'Cardiovascular', 'Renal', 'Respiratory', 'Endocrine', 'Gastrointestinal',
   'Hematology & Oncology', 'Neurology', 'Immunology', 'Microbiology & Infectious disease',
-  'Pharmacology', 'Reproductive & Musculoskeletal',
+  'Pharmacology', 'Reproductive & Musculoskeletal', 'Psychiatry', 'Biostatistics, Ethics & Prevention',
 ];
 
 /** Hidden structured block that feeds the knowledge graph (spec §30–31). */

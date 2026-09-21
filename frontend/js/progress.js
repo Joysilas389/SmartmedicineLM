@@ -8,6 +8,7 @@ import { SYSTEMS } from './graph-seed.js';
 import { forecast } from './srs.js';
 import { buildPlan, PHASE_LABEL } from './study-plan.js';
 import { composeAndSend } from './chat.js';
+import { examLabel } from './exams.js';
 
 const pct = (v) => (v == null ? '–' : `${Math.round(v * 100)}%`);
 const bar = (v, cls = '') => `<span class="mbar ${cls}"><span style="width:${v == null ? 0 : Math.round(v * 100)}%"></span></span>`;
@@ -50,7 +51,7 @@ export async function renderProgress() {
 
     <section class="dash-hero">
       <div class="hero-main">
-        <div class="small text-body-secondary">${escapeHtml(state.settings.studyPlan?.exam || 'USMLE Step 1')} · overall mastery</div>
+        <div class="small text-body-secondary">${escapeHtml(state.settings.studyPlan?.exam || examLabel())} · overall mastery</div>
         <div class="hero-num">${pct(overall)}</div>
         ${bar(overall, 'lg')}
         <div class="small text-body-secondary mt-1">Based on ${rated.length} of ${graph.size} concepts studied so far.</div>
@@ -154,7 +155,7 @@ function renderPlan(fc) {
   const input = state.settings.studyPlan || {};
   const plan = input.examDate ? buildPlan(input, { graph, records, systems: SYSTEMS, dueForecast: fc }) : null;
   const form = `<form class="plan-form" id="planForm">
-      <div><label class="form-label small" for="pExam">Exam</label><input class="form-control form-control-sm" id="pExam" value="${escapeHtml(input.exam || 'USMLE Step 1')}"></div>
+      <div><label class="form-label small" for="pExam">Exam</label><input class="form-control form-control-sm" id="pExam" value="${escapeHtml(input.exam || examLabel())}"></div>
       <div><label class="form-label small" for="pDate">Exam date</label><input type="date" class="form-control form-control-sm" id="pDate" value="${escapeHtml(input.examDate || '')}" required></div>
       <div><label class="form-label small" for="pHours">Hours per day</label><input type="number" class="form-control form-control-sm" id="pHours" min="0.5" max="16" step="0.5" value="${escapeHtml(String(input.hours || 4))}"></div>
       <div><label class="form-label small" for="pTarget">Finish first pass by <span class="text-body-secondary">(optional)</span></label><input type="date" class="form-control form-control-sm" id="pTarget" value="${escapeHtml(input.targetDate || '')}"></div>
@@ -216,7 +217,7 @@ function renderPlan(fc) {
     e.preventDefault();
     const examDate = $('#pDate', box).value;
     if (!examDate) return toast('Choose your exam date.', 'warning');
-    saveSettings({ studyPlan: { exam: $('#pExam', box).value.trim() || 'USMLE Step 1', examDate, hours: Number($('#pHours', box).value) || 4, targetDate: $('#pTarget', box).value || '' } });
+    saveSettings({ studyPlan: { exam: $('#pExam', box).value.trim() || examLabel(), examDate, hours: Number($('#pHours', box).value) || 4, targetDate: $('#pTarget', box).value || '' } });
     renderPlan(fc);
     toast('Study plan saved.', 'success', 2000);
   });

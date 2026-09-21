@@ -3,7 +3,7 @@ const SETTINGS_KEY = 'sm.settings.v1';
 
 export const POLICY_TOGGLES = [
   { key: 'mechanism_first', label: 'Mechanism-first', hint: 'Causal chains for every mechanism' },
-  { key: 'step1_high_yield', label: 'Step 1 focus', hint: 'High-yield facts, distractors and clues' },
+  { key: 'step1_high_yield', label: 'Exam high-yield notes', hint: 'High-yield points, tempting wrong answers and clues for your exam' },
   { key: 'clinical_case', label: 'Clinical cases', hint: 'A realistic patient after the mechanism' },
   { key: 'spatial_anchor', label: 'Spatial anchors', hint: 'Physical mental models for hard ideas' },
   { key: 'mermaid_diagrams', label: 'Diagrams', hint: 'Mermaid flowcharts where they help' },
@@ -20,6 +20,7 @@ const DEFAULTS = {
   knowledgeMode: 'hybrid',
   theme: 'auto',
   ghanaContext: false,
+  exam: 'step1',
   retrievalK: 6,
   sidebarCollapsed: false,
   scheduler: 'fsrs',
