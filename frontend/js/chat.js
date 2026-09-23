@@ -4,6 +4,7 @@ import { db } from './store.js';
 import { $, $$, uid, escapeHtml, toast, confirmDialog, promptDialog, downloadText, debounce } from './ui.js';
 import { renderMessage, handleDiagramAction, extractConceptBlock } from './render.js';
 import { planFor, mergeLessonBlock, recordEvidence } from './knowledge-store.js';
+import { enableHighlighting } from './highlights.js';
 import { checkCitations } from './validators.js';
 import { search } from './retrieval.js';
 import { imageForModel, classifyFile } from './ingestion.js';
@@ -554,6 +555,7 @@ async function runAssistant(chat, userMsg, images, pinned) {
     }
   }
   renderLessonCheck(node, aiMsg);
+  enableHighlighting(node.querySelector('.prose'), `msg:${aiMsg.id}`);
   await db.put('messages', aiMsg);
   await updateChat(chat, {});
   if (nearBottom()) scrollToBottom();
@@ -593,6 +595,7 @@ async function appendMessage(m, { streaming = false } = {}) {
       renderSources(el, m);
       renderPrereq(el, m);
       renderLessonCheck(el, m);
+      if (m.role === 'assistant' && !m.error) enableHighlighting(body, `msg:${m.id}`);
     }
   }
   els.thread.appendChild(el);

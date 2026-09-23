@@ -1,5 +1,6 @@
 /* Document viewer (spec §10): thumbnails, navigation, zoom, search, selectable text, page actions. */
 import { examShort } from './exams.js';
+import { enableHighlighting } from './highlights.js';
 import { state } from './state.js';
 import { db } from './store.js';
 import { $, $$, escapeHtml, toast, debounce } from './ui.js';
@@ -199,6 +200,7 @@ async function renderPage() {
 async function renderTextPage() {
   const text = await pageText(cur.doc.id, cur.page);
   $('#stageInner').innerHTML = `<div class="page-text position-static w-100" style="max-width:720px">${escapeHtml(text || 'No text on this page.')}</div>`;
+  enableHighlighting($('#stageInner .page-text'), `doc:${cur.doc.id}:${cur.page}`);
   updatePager();
 }
 

@@ -11,7 +11,7 @@ import { authEnabled, currentUser, sameOrigin } from './_auth.js';
 
 export const config = { runtime: 'edge' };
 
-export const SYNC_STORES = ['chats', 'messages', 'documents', 'chunks', 'flashcards', 'questions', 'blocks', 'attempts', 'mastery', 'graph', 'reviews', 'boards', 'settings'];
+export const SYNC_STORES = ['chats', 'messages', 'documents', 'chunks', 'flashcards', 'questions', 'blocks', 'attempts', 'mastery', 'graph', 'reviews', 'boards', 'highlights', 'settings'];
 const MAX_CHANGES = 1000;
 const MAX_RECORD_BYTES = 1_000_000;
 const MAX_RESPONSE_BYTES = 3_000_000;

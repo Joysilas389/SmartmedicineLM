@@ -22,6 +22,7 @@ export const SHEETS = [
   { store: 'documents', sheet: 'Documents', cols: [['Title', 'title'], ['Type', 'fileType'], ['Pages', 'pageCount'], ['Status', 'status'], ['Added', 'createdAt', 'date']] },
   { store: 'chunks', sheet: 'Document text', cols: [['Document', 'docId'], ['Page', 'page'], ['Section', 'section'], ['Text', 'text', 'long']] },
   { store: 'graph', sheet: 'Knowledge graph', cols: [['Id', 'id'], ['Updated', 'updatedAt', 'date']] },
+  { store: 'highlights', sheet: 'Highlights', cols: [['Highlighted text', 'text', 'long'], ['Ink', 'color'], ['Where', 'target'], ['Saved', 'createdAt', 'date']] },
   { store: 'boards', sheet: 'Whiteboards', cols: [['Title', 'title'], ['Challenge', 'challenge'], ['Updated', 'updatedAt', 'date']] },
 ];
 export const STORES_IN_WORKBOOK = SHEETS.map((s) => s.store);
