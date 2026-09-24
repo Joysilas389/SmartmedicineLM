@@ -125,7 +125,7 @@ function ensureBar() {
   bar = document.createElement('div');
   bar.className = 'hl-bar';
   bar.hidden = true;
-  bar.innerHTML = `${INKS.map((i) => `<button type="button" class="hl-ink" data-ink="${i.key}" style="--ink:${i.color}" aria-label="Highlight ${i.label}"></button>`).join('')}
+  bar.innerHTML = `<span class="hl-label"><i class="bi bi-highlighter"></i><span>Highlight</span></span>${INKS.map((i) => `<button type="button" class="hl-ink" data-ink="${i.key}" style="--ink:${i.color}" aria-label="Highlight ${i.label}"></button>`).join('')}
     <span class="hl-sep"></span>
     <button type="button" class="hl-ink hl-eraser" data-ink="erase" aria-label="Erase highlight"><i class="bi bi-eraser"></i></button>`;
   document.body.appendChild(bar);
@@ -146,9 +146,24 @@ function ensureBar() {
   return bar;
 }
 
+const touchDevice = () => matchMedia('(pointer: coarse)').matches;
+
 function showBar(rect) {
   const el = ensureBar();
   el.hidden = false;
+  // On phones and tablets the browser shows its own selection menu (Copy, Select all, Web
+  // search) right next to the selection, so dock ours at the bottom where nothing covers it.
+  if (touchDevice()) {
+    el.classList.add('docked');
+    el.style.left = '';
+    el.style.top = '';
+    // Sit above the message box when there is one, otherwise near the bottom edge.
+    const composer = document.querySelector('.view:not([hidden]) .composer, .composer');
+    const rectC = composer?.offsetParent ? composer.getBoundingClientRect() : null;
+    el.style.bottom = rectC && rectC.top < innerHeight ? `${Math.max(12, innerHeight - rectC.top + 10)}px` : '';
+    return;
+  }
+  el.classList.remove('docked');
   const w = el.offsetWidth || 240;
   const h = el.offsetHeight || 46;
   const left = Math.min(Math.max(8, rect.left + rect.width / 2 - w / 2), Math.max(8, innerWidth - w - 8));
@@ -199,7 +214,7 @@ function onSelectionChange() {
 }
 
 document.addEventListener('selectionchange', () => setTimeout(onSelectionChange, 0));
-document.addEventListener('scroll', hideBar, true);
+document.addEventListener('scroll', () => !touchDevice() && hideBar(), true);
 window.addEventListener('resize', hideBar);
 
 /** Everything highlighted, newest first (used by the Highlights view). */
