@@ -464,6 +464,7 @@ async function runAssistant(chat, userMsg, images, pinned) {
       depth: s.depth,
       knowledgeMode: s.knowledgeMode,
       exam: s.exam || 'step1',
+      level: s.level || 'auto',
       temperature: s.temperature,
       policy: { ...s.policy, ghana_context: s.ghanaContext },
       imageKind: userMsg.imageKind || imageSource?.imageKind || 'auto',
@@ -586,7 +587,8 @@ async function appendMessage(m, { streaming = false } = {}) {
       <div class="prose">${streaming ? '<div class="thinking" aria-label="Thinking"><span></span><span></span><span></span></div>' : ''}</div>
       <div class="msg-sources"></div>
       <div class="msg-check"></div>
-      <div class="msg-actions"><button class="btn-icon" data-action="copy" type="button" aria-label="Copy response" title="Copy"><i class="bi bi-copy"></i></button></div>`;
+      <div class="msg-actions">
+        <button class="msg-act" data-action="reexplain" title="Explain this differently"><i class="bi bi-arrow-repeat"></i><span>Explain differently</span></button><button class="btn-icon" data-action="copy" type="button" aria-label="Copy response" title="Copy"><i class="bi bi-copy"></i></button></div>`;
     setModeTag(el, m.mode);
     if (!streaming) {
       const body = el.querySelector('.prose');
@@ -696,6 +698,8 @@ async function onThreadClick(e) {
     act.disabled = true;
     act.innerHTML = `<i class="bi bi-check2 me-1"></i>Added ${n}`;
     toast(`${n} card${n === 1 ? '' : 's'} added to your deck.`, 'success');
+  } else if (act.dataset.action === 'reexplain') {
+    composeAndSend("I don't understand that explanation. Please explain it differently, from first principles.");
   } else if (act.dataset.action === 'rate') {
     const node = act.closest('.msg');
     const msg = await db.get('messages', node.dataset.id);

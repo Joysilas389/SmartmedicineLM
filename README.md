@@ -34,6 +34,15 @@ Built from the *SmartMedicineLM Engineering Specification* (83 sections). This r
 - **Cross-device sync**: every device keeps a full local copy; changes queue in an outbox and sync in the background (last write wins), including settings. Signing out leaves the device clean; a second person on the same device never sees the first person's data.
 - **Semantic search**: passages are embedded in the browser with all-MiniLM-L6-v2 (Web Worker, WebAssembly) and fused with BM25 by reciprocal rank fusion, so "why do my ankles swell" finds a passage about oncotic pressure. No API key; a 23 MB model downloads once. Toggle in Settings.
 
+### The teaching engine
+
+The master education specification (learner levels, layered architecture, the 80/20 knowledge hierarchy, first-principles derivation, "why" and "why not" reasoning, negative findings, misconceptions and exceptions, analogies with their limits, cross-linking, cognitive-load management, synthesis and retention, evidence honesty and safety) lives in `ai/teacher/pedagogy.js` as composable modules rather than one giant prompt. The controller assembles only what the turn needs:
+
+- **Learner level** (Settings → Teach me as a): beginner, medical student, exam candidate, resident, specialist, or detected from your question.
+- **Subject frameworks** switch on from the question itself: ECG (rate → rhythm → axis → intervals → ST/T), imaging, acid–base (pH → primary → compensation → gap → delta), laboratory interpretation, pharmacology (target → mechanism → effect → adverse → contraindications), anatomy, microbiology, physiology-first, pathology, emergency ABCDE, and differential frameworks. At most two per answer.
+- **Situational modes**: *compare* ("X vs Y") builds a discriminator table; *case* ("give me a clinical case") withholds the diagnosis and makes you reason; *re-explain* fires on "I don't understand" (or the **Explain differently** button on any answer) and is forbidden from repeating the same explanation.
+- **Lean when it should be**: a one-line factual question gets a short brief, not the whole doctrine; a full lesson gets hierarchy, misconceptions, synthesis and a quality self-check.
+
 ### Phase 3: images, interactive diagrams, whiteboard
 
 - **Medical image understanding**: when you attach an image, choose ECG, X-ray/CT/MRI, histology, pathology, clinical photo or diagram (or auto-detect). Each type gets a systematic read (e.g. ECG: rate → rhythm → axis → intervals → P → QRS → ST/T → interpretation), then the mechanism behind every finding.

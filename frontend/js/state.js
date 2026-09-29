@@ -21,6 +21,7 @@ const DEFAULTS = {
   theme: 'auto',
   ghanaContext: false,
   exam: 'step1',
+  level: 'auto',
   retrievalK: 6,
   sidebarCollapsed: false,
   scheduler: 'fsrs',

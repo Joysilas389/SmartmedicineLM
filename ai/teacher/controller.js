@@ -1,4 +1,5 @@
 import * as M from './modules.js';
+import * as P from './pedagogy.js';
 
 /** Default structured teaching policy (spec §79). The learner's toggles override it. */
 export const DEFAULT_POLICY = Object.freeze({
@@ -20,7 +21,7 @@ export const DEFAULT_POLICY = Object.freeze({
   ghana_context: false,
 });
 
-export const MODES = ['learn', 'review', 'recall', 'concise', 'standard', 'image', 'image_quiz', 'image_eval', 'continue'];
+export const MODES = ['learn', 'review', 'recall', 'concise', 'standard', 'compare', 'case', 'reexplain', 'image', 'image_quiz', 'image_eval', 'continue'];
 export const DEPTHS = ['quick', 'standard', 'deep', 'comprehensive'];
 export const KNOWLEDGE_MODES = ['hybrid', 'library', 'general'];
 
@@ -38,6 +39,13 @@ export function detectIntent(text = '', hasImages = false) {
   if (/absolute zero|from zero|from scratch|know nothing|from the (very )?(beginning|start)|first principles|\bteach me\b/.test(t)) return 'learn';
   if (/\b\d+[- ]?min(ute)?s?\b|\bquick (review|recap|summary)\b|\brecap\b|\breview\b|\brevise\b|\bsummar(y|ise|ize)\b|\bhigh[- ]yield (points|facts)\b/.test(t)) return 'review';
   if (hasImages) return 'image';
+  // "I don't understand" must never get the same explanation again (master spec §46).
+  if (
+    /\b(i (still )?(do not|don'?t) (understand|get it|follow)|i ?(am|'m|'?m)? ?(still )?(confused|lost)|still (confused|lost|don'?t get)|makes? no sense|not clear|too (complicated|complex|hard to follow)|explain (it |this |that )?(again|differently|another way|more simply|in simpler)|simpler|say (it|that) (again|differently))\b/.test(t)
+  )
+    return 'reexplain';
+  if (/\b(compare|comparison|difference between|differences between|distinguish between|versus)\b/.test(t) || /\bvs\.?\b/.test(t)) return 'compare';
+  if (/\b(give me a case|clinical case|practice case|case (scenario|vignette)|walk me through a case|simulate a (patient|case))\b/.test(t)) return 'case';
   const words = t.split(' ').filter(Boolean).length;
   if (words <= 18 && /^(what|which|who|when|where|is|are|does|do|can|define|name|list)\b/.test(t)) return 'concise';
   return 'standard';
@@ -66,6 +74,9 @@ const TOKEN_BUDGET = {
   review: { quick: 1500, standard: 2500, deep: 4000, comprehensive: 6000 },
   recall: { quick: 1000, standard: 1500, deep: 2500, comprehensive: 3000 },
   standard: { quick: 1500, standard: 3000, deep: 6000, comprehensive: 9000 },
+  compare: { quick: 1200, standard: 2500, deep: 4500, comprehensive: 7000 },
+  case: { quick: 1200, standard: 2200, deep: 3500, comprehensive: 5000 },
+  reexplain: { quick: 1000, standard: 2000, deep: 3500, comprehensive: 5000 },
   image: { quick: 1500, standard: 3000, deep: 6000, comprehensive: 9000 },
   image_quiz: { quick: 600, standard: 800, deep: 800, comprehensive: 1000 },
   image_eval: { quick: 2500, standard: 4000, deep: 6000, comprehensive: 8000 },
@@ -102,6 +113,12 @@ Ask 3–5 questions of increasing difficulty (comprehension, application with a 
 When the learner answers in a later turn, evaluate each answer with these headings: What you got right · What you missed · The mechanism · Correction · Memory anchor. Then classify any error as one of: knowledge gap, mechanism gap, recognition failure, misread clue, differential confusion, calculation error, distractor trap, recall failure.`;
     case 'concise':
       return `MODE: DIRECT ANSWER. The learner asked a focused question. Answer it directly in a short paragraph or a small chain block (under about 250 words). Still explain WHY in one or two sentences. Do not produce a full lesson; offer at the end, in one line, to teach it from zero.`;
+    case 'compare':
+      return `MODE: COMPARE. ${depthLine}\n${P.COMPARE_MODE}`;
+    case 'case':
+      return `MODE: CLINICAL CASE. ${depthLine}\n${P.CASE_ENGINE}`;
+    case 'reexplain':
+      return P.REEXPLAIN;
     case 'image_quiz':
       return M.imagePracticeInstructions(imageKind);
     case 'image_eval':
@@ -194,12 +211,28 @@ export function buildTeachingRequest(body = {}) {
     return { refusal: SOURCE_LOCKED_MESSAGE, mode, depth };
   }
 
-  const parts = [M.IDENTITY, M.FORMAT];
+  const level = P.levelOf(controls.level);
+  const teaching = !['continue', 'image_quiz'].includes(mode);
+  const full = ['learn', 'standard', 'review', 'image', 'image_eval', 'case', 'compare'].includes(mode);
+  const lean = ['concise', 'recall'].includes(mode); // a short question gets a short brief
+
+  const parts = [M.IDENTITY, P.PHILOSOPHY, M.FORMAT];
+  if (teaching) parts.push(P.levelInstructions(level));
   if (policy.mermaid_diagrams && !['concise', 'recall', 'image_quiz'].includes(mode)) parts.push(M.MERMAID);
   if (policy.plain_language_first) parts.push(M.PLAIN_LANGUAGE);
   if (policy.problem_first && (mode === 'learn' || mode === 'image')) parts.push(M.PROBLEM_FIRST);
-  if (policy.mechanism_first) parts.push(M.MECHANISM);
+  if (policy.mechanism_first) {
+    parts.push(M.MECHANISM);
+    if (teaching) parts.push(P.FIRST_PRINCIPLES, P.WHY_REQUIREMENT);
+  }
+  if (teaching && !lean) parts.push(P.WHY_NOT, P.TERMINOLOGY);
+  if (teaching) parts.push(P.UNCERTAINTY);
+  if (full) parts.push(P.HIERARCHY, P.MISCONCEPTIONS, P.ANALOGY, P.CROSS_LINK, P.COGNITIVE_LOAD);
+  if (full && depth !== 'quick') parts.push(P.SYNTHESIS, P.TEACHING_LOOP);
+  if (policy.mermaid_diagrams && full) parts.push(P.MINDMAP);
   parts.push(M.COMMIT);
+  // Frameworks for what this question is actually about (ECG, imaging, pharmacology…).
+  if (teaching) for (const s2 of P.subjectModules(`${last.content} ${controls.topicHint || ''}`, mode === 'concise' ? 1 : 2)) parts.push(s2.text);
   if (policy.spatial_anchor && ['learn', 'standard', 'image'].includes(mode)) parts.push(M.SPATIAL_ANCHOR);
   if (!['image_quiz', 'continue'].includes(mode)) parts.push(M.examFocus(exam));
   if (policy.step1_high_yield && !['recall', 'image_quiz'].includes(mode)) parts.push(M.examHighYield(exam));
@@ -207,7 +240,10 @@ export function buildTeachingRequest(body = {}) {
   if (wantsCards || (policy.flashcards && (mode === 'learn' || (mode === 'standard' && depth === 'comprehensive')))) parts.push(M.FLASHCARDS);
   if (policy.active_recall && mode === 'learn') parts.push(M.ACTIVE_RECALL_END);
   if (policy.ghana_context) parts.push(M.GHANA);
-  parts.push(M.SAFETY);
+  if (mode === 'recall' || mode === 'case') parts.push(P.QUESTION_LEVELS);
+  if (full && ['deep', 'comprehensive'].includes(depth)) parts.push(P.RETENTION_PLAN);
+  parts.push(P.EVIDENCE, P.REAL_PATIENT, M.SAFETY);
+  if (teaching && !lean) parts.push(P.QUALITY_CHECK);
   const imageKind = M.IMAGE_KINDS.includes(controls.imageKind) ? controls.imageKind : 'auto';
   const imageTurn = mode === 'image' || mode === 'image_quiz' || mode === 'image_eval' || (hasImages && mode !== 'continue');
   if (imageTurn && mode !== 'image_quiz') parts.push(M.imageInstructions(imageKind));
@@ -230,6 +266,8 @@ export function buildTeachingRequest(body = {}) {
     policy,
     sources,
     exam,
+    level,
+    subjects: teaching ? P.subjectKeys(last.content) : [],
   };
 }
 
