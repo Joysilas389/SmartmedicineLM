@@ -24,6 +24,7 @@ ACE inhibition :: the enzyme that makes angiotensin II is blocked
   > [!CLINICAL]    for bedside pearls or warnings
   > [!NOTE]        for anything else worth isolating
 - Tables: use Markdown tables for comparisons (differentials, drug classes).
+- For approximate values write "≈" or "about" (≈80%, about 10 mg), never a tilde (~).
 - Never output raw HTML.`;
 
 export const MERMAID = `Diagrams: when a diagram genuinely improves understanding, add ONE Mermaid (v10) flowchart in a \`\`\`mermaid block.

@@ -25,6 +25,20 @@ export function initMermaid() {
 
 if (globalThis.window?.marked) {
   window.marked.setOptions({ gfm: true, breaks: false });
+  // Medical text uses "~" to mean "approximately" (~80%, ~10 mg). GitHub-flavoured Markdown
+  // would strike through everything between two single tildes, so only "~~double~~" means
+  // strikethrough here; a single tilde is always shown as written.
+  window.marked.use({
+    tokenizer: {
+      del(src) {
+        if (src[0] !== '~') return false;
+        const m = /^~~(?=\S)([\s\S]*?\S)~~(?!~)/.exec(src);
+        if (m) return { type: 'del', raw: m[0], text: m[1], tokens: this.lexer.inlineTokens(m[1]) };
+        const run = /^~+/.exec(src)[0];
+        return { type: 'text', raw: run, text: run };
+      },
+    },
+  });
 }
 
 const CALLOUTS = {
