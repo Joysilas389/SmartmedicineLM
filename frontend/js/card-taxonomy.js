@@ -37,6 +37,10 @@ const SYSTEM_TO_CLINICAL = {
   'Biostatistics, Ethics & Prevention': 'Preventive medicine, Biostatistics & Ethics',
   Pharmacology: 'Pharmacology',
   Immunology: 'Immunology',
+  Pediatrics: 'Pediatrics',
+  'Obstetrics & Gynecology': 'Obstetrics & Gynecology',
+  'Surgery & Emergency': 'Surgery & Emergency',
+  Dermatology: 'Dermatology',
   Foundations: 'General principles',
 };
 

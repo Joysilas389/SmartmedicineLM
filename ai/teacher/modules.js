@@ -115,7 +115,8 @@ export function layersFor(policy, exam = 'step1') {
 export const SYSTEMS = [
   'Foundations', 'Cardiovascular', 'Renal', 'Respiratory', 'Endocrine', 'Gastrointestinal',
   'Hematology & Oncology', 'Neurology', 'Immunology', 'Microbiology & Infectious disease',
-  'Pharmacology', 'Reproductive & Musculoskeletal', 'Psychiatry', 'Biostatistics, Ethics & Prevention',
+  'Pharmacology', 'Reproductive & Musculoskeletal', 'Psychiatry', 'Pediatrics', 'Obstetrics & Gynecology', 'Surgery & Emergency', 'Dermatology',
+  'Biostatistics, Ethics & Prevention',
 ];
 
 /** Hidden structured block that feeds the knowledge graph (spec §30–31). */

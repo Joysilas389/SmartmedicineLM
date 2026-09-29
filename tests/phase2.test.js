@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { KnowledgeGraph, parseSeed } from '../frontend/js/graph.js';
+import { KnowledgeGraph, parseSeed, norm } from '../frontend/js/graph.js';
 import { emptyRecord, applyEvidence, mastery, status, prerequisitePlan, systemSummary, bottlenecks } from '../frontend/js/learner-model.js';
 import { FSRS, SM2, retrievability, migrateCard, DAY, forecast } from '../frontend/js/srs.js';
 import { parseQuestions, extractQuestionObjects } from '../frontend/js/question-parse.js';
@@ -12,10 +12,44 @@ import { buildTeachingRequest } from '../ai/teacher/controller.js';
 /* ---------------- knowledge graph ---------------- */
 test('seed graph: every prerequisite resolves and there are no cycles', () => {
   const g = new KnowledgeGraph();
-  assert.ok(g.size >= 90);
+  assert.ok(g.size >= 330, `comprehensive coverage (${g.size} concepts)`);
   for (const c of parseSeed()) for (const n of c.prereqNames) assert.ok(g.find(n), `${c.name} -> ${n}`);
   for (const c of g.all()) assert.ok(!g.prerequisites(c.id, 20).some((p) => p.concept.id === c.id), `cycle at ${c.name}`);
   for (const c of g.all()) assert.ok(SYSTEMS.includes(c.system), c.name);
+});
+
+test('seed graph: no term points at two concepts, and every system is covered', () => {
+  const g = new KnowledgeGraph();
+  const owner = new Map();
+  const clashes = [];
+  for (const c of parseSeed())
+    for (const phrase of [c.name, ...c.aliases]) {
+      const k = norm(phrase);
+      if (owner.has(k) && owner.get(k) !== c.name) clashes.push(`${phrase}: ${owner.get(k)} vs ${c.name}`);
+      else owner.set(k, c.name);
+    }
+  assert.deepEqual(clashes, [], 'each term has one owner');
+  for (const system of SYSTEMS) assert.ok(g.bySystem(system).length >= 5, `${system} has concepts`);
+});
+
+test('the graph covers the three exams: basic science, clinical medicine and Step 3 subjects', () => {
+  const g = new KnowledgeGraph();
+  const expect = {
+    'Teach me the urea cycle': 'Amino acid metabolism and the urea cycle',
+    'atrial fibrillation management': 'Atrial fibrillation and flutter',
+    'approach to hyponatremia': 'Hyponatremia and hypernatremia',
+    'management of postpartum hemorrhage': 'Postpartum complications',
+    'pyloric stenosis in an infant': 'Congenital gastrointestinal disorders',
+    'melanoma ABCDE criteria': 'Skin cancers',
+    'acetaminophen overdose antidote': 'Toxicology and overdose',
+    'how do I interpret a likelihood ratio': 'Diagnostic test evaluation',
+    'advance directive and DNR': 'End-of-life care and ethics',
+    'serotonin syndrome': 'Psychopharmacology in practice',
+    'septic arthritis of the knee': 'Bone and joint infection',
+    'penetrating abdominal trauma': 'Chest and abdominal trauma',
+    'tension pneumothorax': 'Pleural disease',
+  };
+  for (const [q, name] of Object.entries(expect)) assert.equal(g.match(q)?.name, name, q);
 });
 
 test('graph: matches requests to concepts, longest phrase wins', () => {
