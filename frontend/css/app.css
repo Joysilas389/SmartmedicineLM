@@ -874,3 +874,14 @@ mark.hl-purple { --hl: #c3b3f288; }
 .msg-act { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--sm-muted); font-size: .78rem; padding: 4px 8px; border-radius: 8px; cursor: pointer; }
 .msg-act:hover { background: var(--sm-panel); color: var(--sm-hema); }
 @media (max-width: 420px) { .msg-act span { display: none; } }
+
+/* flashcard decks */
+.deck-wrap { margin-bottom: 18px; }
+.deck-group { margin-bottom: 14px; }
+.deck-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 8px; }
+.deck { display: flex; flex-direction: column; gap: 2px; text-align: left; border: 1px solid var(--sm-rule); border-radius: 12px; padding: 9px 12px; background: var(--sm-paper); color: var(--sm-ink); }
+.deck:hover { border-color: var(--sm-hema); }
+.deck.active { border-color: var(--sm-hema); background: var(--sm-hema-soft); }
+.deck b { font-size: .88rem; }
+.deck span { font-size: .75rem; color: var(--sm-muted); }
+.deck-due { color: var(--sm-eosin); font-weight: 600; }

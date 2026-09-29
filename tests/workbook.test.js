@@ -40,9 +40,9 @@ test('the workbook is readable: real sheets, readable columns, dates and percent
   assert.ok(wb.SheetNames.includes('Flashcards') && wb.SheetNames.includes('Progress') && wb.SheetNames.includes('About'));
   assert.equal(wb.SheetNames.length, SHEETS.length + 3);
   const cards = XLSX.utils.sheet_to_json(wb.Sheets.Flashcards, { header: 1, raw: true });
-  assert.deepEqual(cards[0].slice(0, 4), ['Question', 'Answer', 'Concept', 'Next review']);
+  assert.deepEqual(cards[0].slice(0, 6), ['Question', 'Answer', 'Deck', 'Category', 'Concept', 'Next review']);
   assert.equal(cards[1][0], 'Why does hypoalbuminemia cause edema?');
-  assert.ok(cards[1][3] instanceof Date, 'due dates are real Excel dates');
+  assert.ok(cards[1][5] instanceof Date, 'due dates are real Excel dates');
   const prog = XLSX.utils.sheet_to_json(wb.Sheets.Progress, { header: 1, raw: true });
   assert.equal(prog[1][2], 30, 'understanding shown as a percentage');
   assert.equal(prog[1][4], 50);
@@ -56,8 +56,8 @@ test('flashcards edited or added in Excel come back in; other sheets stay author
   ws.B2 = { t: 's', v: 'Low plasma oncotic pressure lets fluid leave the capillary.' }; // edited answer
   ws.A4 = { t: 's', v: 'What is the anion gap formula?' }; // a new card typed into an empty row
   ws.B4 = { t: 's', v: 'Na - (Cl + HCO3)' };
-  ws.C4 = { t: 's', v: 'Anion gap' };
-  ws['!ref'] = 'A1:H4';
+  ws.E4 = { t: 's', v: 'Anion gap' }; // the Concept column
+  ws['!ref'] = 'A1:L4';
   const back = parseWorkbook(XLSX, XLSX.read(XLSX.write(wb, { bookType: 'xlsx', type: 'array' }), { type: 'array' }), 999);
   assert.equal(back.stats.edited, 1);
   assert.equal(back.stats.added, 1);
@@ -82,7 +82,7 @@ test('a file that is not a SmartMedicineLM workbook is refused clearly', () => {
 
 test('damaged rows are skipped instead of losing the whole file', () => {
   const wb = buildWorkbook(XLSX, sample());
-  wb.Sheets.Flashcards.H3 = { t: 's', v: '{broken json' };
+  wb.Sheets.Flashcards.J3 = { t: 's', v: '{broken json' };
   const back = parseWorkbook(XLSX, XLSX.read(XLSX.write(wb, { bookType: 'xlsx', type: 'array' }), { type: 'array' }));
   assert.equal(back.stores.flashcards.length, 1);
   assert.equal(back.stats.skipped, 1);

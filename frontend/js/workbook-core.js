@@ -11,7 +11,7 @@ const RECORD = 'Record (do not edit)';
 
 /** [header, field, kind] kind: text | long | date | pct | bool */
 export const SHEETS = [
-  { store: 'flashcards', sheet: 'Flashcards', editable: true, cols: [['Question', 'q', 'long'], ['Answer', 'a', 'long'], ['Concept', 'topic'], ['Next review', 'due', 'date'], ['Interval (days)', 'interval'], ['Reviews', 'reps'], ['Lapses', 'lapses']] },
+  { store: 'flashcards', sheet: 'Flashcards', editable: true, cols: [['Question', 'q', 'long'], ['Answer', 'a', 'long'], ['Deck', 'deck'], ['Category', 'category'], ['Concept', 'topic'], ['Next review', 'due', 'date'], ['Interval (days)', 'interval'], ['Reviews', 'reps'], ['Lapses', 'lapses']] },
   { store: 'mastery', sheet: 'Progress', cols: [['Concept', 'name'], ['System', 'system'], ['Understanding', 'understanding', 'pct'], ['Recall', 'recall', 'pct'], ['Application', 'application', 'pct'], ['Questions', 'attempts'], ['Correct', 'correct'], ['Errors', 'errors'], ['Last studied', 'lastReviewed', 'date'], ['Next review', 'nextReview', 'date']] },
   { store: 'chats', sheet: 'Chats', cols: [['Title', 'title'], ['Created', 'createdAt', 'date'], ['Updated', 'updatedAt', 'date'], ['Favourite', 'favorite', 'bool'], ['Archived', 'archived', 'bool']] },
   { store: 'messages', sheet: 'Messages', cols: [['Chat', 'chatId'], ['Role', 'role'], ['Mode', 'mode'], ['Text', 'content', 'long'], ['Time', 'createdAt', 'date']] },

@@ -13,6 +13,7 @@ Built from the *SmartMedicineLM Engineering Specification* (83 sections). This r
 - **Knowledge modes**: *My library* (source-locked: refuses rather than guesses), *Hybrid*, *General*.
 - **Citations**: `[S1]` tags open the exact page in the built-in PDF viewer.
 - **PDF viewer**: thumbnails, zoom, fit-width, in-document search, and page actions: *Explain this page*, *Teach this section*, *Generate questions*, *Create flashcards*.
+- **Flashcard decks**: every card is filed under a basic-science discipline (Anatomy, Physiology, Biochemistry & Genetics, Pathology, Pharmacology, Microbiology, Immunology…) or a clinical specialty (Cardiology, Nephrology, Obstetrics & Gynecology, Pediatrics, Infectious disease…), from its linked concept and its wording, so a large collection stays organised. Review one deck or everything; existing cards are filed automatically the first time you open the page.
 - **Flashcards**: FSRS spaced repetition (difficulty, stability, retrievability per card; SM-2 selectable), a live "recall now" estimate for every card and a due-count badge.
 - **Learn**: system-by-system topic launcher.
 - **Model-agnostic**: Anthropic (Claude), any OpenAI-compatible API (OpenAI, Groq, OpenRouter, Ollama, vLLM…), or **demo mode** when no key is set, so a fresh deployment always works.

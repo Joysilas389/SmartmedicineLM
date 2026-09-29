@@ -8,9 +8,12 @@ import { state } from './state.js';
 import { $, escapeHtml, uid, toast, confirmDialog } from './ui.js';
 import { getScheduler, GRADES, retrievability, migrateCard } from './srs.js';
 import { resolveConcept, recordEvidence, syncReviewDates } from './knowledge-store.js';
+import { graph } from './knowledge-store.js';
+import { classifyCard, groupCards, CATEGORIES } from './card-taxonomy.js';
 
 const scheduler = () => getScheduler(state.settings.scheduler);
 let session = null;
+let deckFilter = null;
 
 /**
  * Adds cards, skipping duplicates. `concept` (name) links them to the knowledge graph;
@@ -31,6 +34,7 @@ export async function addCards(cards, { chatId = null, topic = '', concept = '',
       conceptId: node?.id || null,
       source,
       chatId,
+      ...classifyCard({ ...c, topic: node?.name || topic, exam: c.exam }, node),
       createdAt: now,
       due: now,
       state: 'new',
@@ -55,7 +59,12 @@ export async function renderFlashcards() {
   const page = $('#flashcardsPage');
   if (session) return renderReview();
   const cards = (await db.all('flashcards')).sort((a, b) => a.due - b.due);
+  await classifyMissing(cards);
   const due = cards.filter((c) => c.due <= Date.now());
+  const groups = groupCards(cards);
+  const activeDeck = deckFilter && cards.some((c) => c.deck === deckFilter) ? deckFilter : null;
+  const shown = activeDeck ? cards.filter((c) => c.deck === activeDeck) : cards;
+  const shownDue = shown.filter((c) => c.due <= Date.now());
   const learned = cards.filter((c) => (c.interval || 0) >= 21).length;
   syncReviewDates(cards).catch(() => {});
   page.innerHTML = `
@@ -63,18 +72,37 @@ export async function renderFlashcards() {
       <h2 class="page-title">Flashcards</h2>
       <p class="page-sub">Mechanism cards from your lessons and missed questions, scheduled with ${scheduler().name} so each comes back just before you'd forget it.</p>
     </div>
-    ${due.length ? `<button class="btn btn-primary" id="startReview" type="button"><i class="bi bi-play-fill me-1"></i>Review ${due.length} due</button>` : ''}</div>
+    ${shownDue.length ? `<button class="btn btn-primary" id="startReview" type="button"><i class="bi bi-play-fill me-1"></i>Review ${shownDue.length} due${activeDeck ? ' in this deck' : ''}</button>` : ''}</div>
     <div class="stat-row">
       <div class="stat"><b>${cards.length}</b><span>cards</span></div>
       <div class="stat"><b>${due.length}</b><span>due now</span></div>
       <div class="stat"><b>${learned}</b><span>mature (21+ days)</span></div>
     </div>
+
     ${
       cards.length
-        ? `<div class="table-responsive"><table class="table card-table align-middle"><thead><tr><th>Question</th><th class="d-none d-md-table-cell">Concept</th><th class="d-none d-sm-table-cell" title="Estimated chance you'd recall it right now">Recall now</th><th>Next review</th><th></th></tr></thead><tbody>
-        ${cards
+        ? `<div class="deck-wrap">${['basic', 'clinical']
+            .filter((cat) => groups[cat].length)
+            .map(
+              (cat) => `<section class="deck-group"><h3 class="section-title"><i class="bi ${CATEGORIES[cat].icon} me-2"></i>${CATEGORIES[cat].label}</h3>
+              <div class="deck-row">${groups[cat]
+                .map(
+                  (g) => `<button type="button" class="deck ${activeDeck === g.deck ? 'active' : ''}" data-deck="${escapeHtml(g.deck)}">
+                    <b>${escapeHtml(g.deck)}</b><span>${g.cards.length} card${g.cards.length === 1 ? '' : 's'}${g.due ? ` · <span class="deck-due">${g.due} due</span>` : ''}</span></button>`
+                )
+                .join('')}</div></section>`
+            )
+            .join('')}
+            ${activeDeck ? `<button type="button" class="btn btn-sm btn-light mb-2" data-deck="">Show all decks</button>` : ''}</div>`
+        : ''
+    }
+    ${
+      cards.length
+        ? `<div class="table-responsive"><table class="table card-table align-middle"><thead><tr><th>Question</th><th class="d-none d-md-table-cell">Deck</th><th class="d-none d-lg-table-cell">Concept</th><th class="d-none d-sm-table-cell" title="Estimated chance you'd recall it right now">Recall now</th><th>Next review</th><th></th></tr></thead><tbody>
+        ${shown
           .map(
-            (c) => `<tr><td>${escapeHtml(c.q)}</td><td class="d-none d-md-table-cell text-body-secondary">${escapeHtml(c.topic || '')}</td>
+            (c) => `<tr><td>${escapeHtml(c.q)}</td><td class="d-none d-md-table-cell text-body-secondary">${escapeHtml(c.deck || '')}</td>
+          <td class="d-none d-lg-table-cell text-body-secondary">${escapeHtml(c.topic || '')}</td>
           <td class="d-none d-sm-table-cell">${recallCell(c)}</td>
           <td class="text-nowrap">${c.due <= Date.now() ? '<span class="status status-processing">Due</span>' : new Date(c.due).toLocaleDateString()}</td>
           <td><button class="btn btn-icon" data-del-card="${c.id}" aria-label="Delete card"><i class="bi bi-trash"></i></button></td></tr>`
@@ -82,8 +110,14 @@ export async function renderFlashcards() {
           .join('')}</tbody></table></div>`
         : `<div class="empty-block"><i class="bi bi-stack"></i><p class="mb-1 fw-semibold">No cards yet</p><p class="mb-0">Ask for a lesson from zero; it ends with flashcards you can add here with one tap.</p></div>`
     }`;
+  page.querySelectorAll('[data-deck]').forEach((b) =>
+    b.addEventListener('click', () => {
+      deckFilter = b.dataset.deck || null;
+      renderFlashcards();
+    })
+  );
   $('#startReview')?.addEventListener('click', () => {
-    session = { queue: due.slice(0, 50), shown: false, done: 0 };
+    session = { queue: shownDue.slice(0, 50), shown: false, done: 0, deck: activeDeck };
     renderReview();
   });
   page.querySelectorAll('[data-del-card]').forEach((b) =>
@@ -152,4 +186,12 @@ function recallCell(c) {
   const pct = Math.round(r * 100);
   const cls = pct >= 85 ? 'text-success' : pct >= 70 ? 'text-warning' : 'text-danger';
   return `<span class="${cls}">${pct}%</span>`;
+}
+
+/** Gives older cards (and any created before a concept existed) their deck, once. */
+async function classifyMissing(cards) {
+  const missing = cards.filter((c) => !c.deck);
+  if (!missing.length) return;
+  for (const c of missing) Object.assign(c, classifyCard(c, c.conceptId ? graph.get(c.conceptId) : graph.find(c.topic || '')));
+  await db.putMany('flashcards', missing);
 }
