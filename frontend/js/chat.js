@@ -5,6 +5,8 @@ import { $, $$, uid, escapeHtml, toast, confirmDialog, promptDialog, downloadTex
 import { renderMessage, handleDiagramAction, extractConceptBlock } from './render.js';
 import { planFor, mergeLessonBlock, recordEvidence } from './knowledge-store.js';
 import { enableHighlighting } from './highlights.js';
+import { suggestPrompts, classifyInput, PROMPT_LIBRARY, firstPlaceholder } from './prompt-coach.js';
+import { graph } from './knowledge-store.js';
 import { checkCitations } from './validators.js';
 import { search } from './retrieval.js';
 import { imageForModel, classifyFile } from './ingestion.js';
@@ -65,6 +67,11 @@ export function initChat() {
     }
   });
   els.input.addEventListener('input', autosize);
+  els.input.addEventListener('input', () => {
+    clearTimeout(ideasTimer);
+    ideasTimer = setTimeout(renderIdeas, 250);
+  });
+  buildPromptLibrary();
   els.input.addEventListener('paste', onPaste);
 
   $$('#starters .starter').forEach((b) =>
@@ -343,6 +350,8 @@ async function send() {
     toast('Wait for your files to finish processing, then send.', 'warning');
     return;
   }
+  const ideasBox = document.getElementById('promptIdeas');
+  if (ideasBox) ideasBox.hidden = true;
   const practising = composer.images.length && composer.imageTask === 'quiz';
   const prompt = text || (practising ? 'I want to read this image myself first.' : 'Explain this image from absolute zero.');
 
@@ -942,4 +951,58 @@ async function saveScope() {
   else state.pendingScope = value;
   bootstrap.Modal.getInstance($('#scopeModal'))?.hide();
   renderChips();
+}
+
+/* ------------------------------------------------------------------ prompt coach */
+let ideasTimer = null;
+const KIND_LABEL = { vignette: 'Looks like a question vignette', passage: 'Looks like a passage you are reading', labs: 'Looks like laboratory results', topic: 'Ways to learn this', question: 'Ways to ask this' };
+
+/** Suggests prompts for whatever is in the box: a topic, a pasted passage, a vignette, lab values. */
+function renderIdeas() {
+  const box = document.getElementById('promptIdeas');
+  if (!box) return;
+  const text = els.input.value;
+  const kind = classifyInput(text);
+  const ideas = kind === 'empty' ? [] : suggestPrompts(text, { graph, exam: state.settings.exam, pinned: composer.pinned }, 5);
+  if (!ideas.length) {
+    box.hidden = true;
+    box.innerHTML = '';
+    return;
+  }
+  box.hidden = false;
+  box.innerHTML = `<div class="ideas-head"><i class="bi bi-lightbulb"></i>${escapeHtml(KIND_LABEL[kind] || 'Suggested prompts')}<button type="button" class="ideas-close" aria-label="Hide suggestions">×</button></div>
+    <div class="ideas-row">${ideas.map((d, i) => `<button type="button" class="idea" data-idea="${i}" title="${escapeHtml(d.why || '')}">${escapeHtml(d.label)}</button>`).join('')}</div>`;
+  box.querySelectorAll('[data-idea]').forEach((b) =>
+    b.addEventListener('click', () => {
+      els.input.value = ideas[Number(b.dataset.idea)].prompt;
+      autosize();
+      box.hidden = true;
+      els.input.focus();
+      els.input.setSelectionRange(els.input.value.length, els.input.value.length);
+    })
+  );
+  box.querySelector('.ideas-close').addEventListener('click', () => (box.hidden = true));
+}
+
+/** The lightbulb menu: a categorised library of prompt templates. */
+function buildPromptLibrary() {
+  const menu = document.getElementById('promptLibrary');
+  if (!menu) return;
+  menu.innerHTML = `<div class="menu-heading">Prompt ideas</div><p class="lib-hint">Tap one, then replace the part in [brackets].</p>${PROMPT_LIBRARY.map(
+    (g, gi) => `<div class="lib-group"><div class="lib-title">${escapeHtml(g.title)}</div>${g.items
+      .map(([label], ii) => `<button type="button" class="dropdown-item lib-item" data-lib="${gi}:${ii}">${escapeHtml(label)}</button>`)
+      .join('')}</div>`
+  ).join('')}`;
+  menu.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-lib]');
+    if (!b) return;
+    const [gi, ii] = b.dataset.lib.split(':').map(Number);
+    const template = PROMPT_LIBRARY[gi].items[ii][1];
+    els.input.value = template;
+    autosize();
+    bootstrap.Dropdown.getInstance(document.getElementById('ideasBtn'))?.hide();
+    els.input.focus();
+    const ph = firstPlaceholder(template);
+    if (ph) els.input.setSelectionRange(ph.start, ph.end); // type straight over the placeholder
+  });
 }

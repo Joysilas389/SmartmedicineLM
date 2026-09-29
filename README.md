@@ -35,6 +35,12 @@ Built from the *SmartMedicineLM Engineering Specification* (83 sections). This r
 - **Cross-device sync**: every device keeps a full local copy; changes queue in an outbox and sync in the background (last write wins), including settings. Signing out leaves the device clean; a second person on the same device never sees the first person's data.
 - **Semantic search**: passages are embedded in the browser with all-MiniLM-L6-v2 (Web Worker, WebAssembly) and fused with BM25 by reciprocal rank fusion, so "why do my ankles swell" finds a passage about oncotic pressure. No API key; a 23 MB model downloads once. Toggle in Settings.
 
+### Prompt coach
+
+As you type or paste, the app works out what you have (a topic, a passage from a book, a question vignette, lab values, a question) and offers the prompts most likely to produce understanding: for a vignette, *walk me through it*, *hint only, no answer*, *next best step* or *mechanism* depending on your exam, *what if one detail changed*; for a passage, *explain in plain language*, *what must I remember*, *what does it assume I know*; for a topic, prompts built from the knowledge graph such as *compare with its classic differential*, *why does it cause its hallmark finding* and *what do I need first*. The lightbulb in the composer opens a categorised library of prompt templates.
+
+Typeface: Source Sans Pro (published today as Source Sans 3), the U.S. Web Design System face used on America.gov, across the whole interface, lessons, diagrams and whiteboard.
+
 ### The teaching engine
 
 The master education specification (learner levels, layered architecture, the 80/20 knowledge hierarchy, first-principles derivation, "why" and "why not" reasoning, negative findings, misconceptions and exceptions, analogies with their limits, cross-linking, cognitive-load management, synthesis and retention, evidence honesty and safety) lives in `ai/teacher/pedagogy.js` as composable modules rather than one giant prompt. The controller assembles only what the turn needs:

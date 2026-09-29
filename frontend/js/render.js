@@ -17,7 +17,7 @@ export function initMermaid() {
     startOnLoad: false,
     securityLevel: 'strict',
     theme: dark ? 'dark' : 'default',
-    fontFamily: 'Instrument Sans, system-ui, sans-serif',
+    fontFamily: '"Source Sans 3", "Source Sans Pro", system-ui, sans-serif',
     flowchart: { htmlLabels: true, curve: 'basis', useMaxWidth: true },
   });
   mermaidReady = true;

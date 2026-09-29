@@ -365,7 +365,7 @@ function drawStroke(ctx, s) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   if (s.tool === 'text') {
-    ctx.font = `600 ${s.size * 6}px "Instrument Sans", system-ui, sans-serif`;
+    ctx.font = `600 ${s.size * 6}px "Source Sans 3", "Source Sans Pro", system-ui, sans-serif`;
     ctx.fillText(s.text, s.x, s.y);
   } else if (s.tool === 'pen' || s.tool === 'highlighter') {
     if (s.tool === 'highlighter') ctx.globalAlpha = 0.3;
