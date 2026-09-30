@@ -4,12 +4,14 @@
  * review feeds the learner model's recall score.
  */
 import { db } from './store.js';
-import { state } from './state.js';
+import { state, saveSettings } from './state.js';
 import { $, escapeHtml, uid, toast, confirmDialog } from './ui.js';
 import { getScheduler, GRADES, retrievability, migrateCard } from './srs.js';
 import { resolveConcept, recordEvidence, syncReviewDates } from './knowledge-store.js';
 import { graph } from './knowledge-store.js';
 import { classifyCard, groupCards, CATEGORIES } from './card-taxonomy.js';
+import { packItems, encodeShare, shareUrl } from './share.js';
+import { interleave } from './notebook-pure.js'; // round-robin across decks
 
 const scheduler = () => getScheduler(state.settings.scheduler);
 let session = null;
@@ -55,6 +57,15 @@ export async function updateDueBadge() {
   b.classList.toggle('d-none', !due);
 }
 
+/** Starts a review of due cards (optionally one deck), interleaving decks so topics alternate. */
+export async function startReview(deck = null) {
+  location.hash = '#/flashcards';
+  await new Promise((r) => setTimeout(r, 0));
+  deckFilter = deck;
+  await renderFlashcards();
+  document.getElementById('startReview')?.click();
+}
+
 export async function renderFlashcards() {
   const page = $('#flashcardsPage');
   if (session) return renderReview();
@@ -93,7 +104,8 @@ export async function renderFlashcards() {
                 .join('')}</div></section>`
             )
             .join('')}
-            ${activeDeck ? `<button type="button" class="btn btn-sm btn-light mb-2" data-deck="">Show all decks</button>` : ''}</div>`
+            <div class="d-flex gap-2 flex-wrap">${activeDeck ? `<button type="button" class="btn btn-sm btn-light mb-2" data-deck="">Show all decks</button>` : ''}
+            <button type="button" class="btn btn-sm btn-outline-primary mb-2" id="shareDeck"><i class="bi bi-share me-1"></i>Share ${activeDeck ? 'this deck' : 'all cards'}</button></div></div>`
         : ''
     }
     ${
@@ -110,6 +122,7 @@ export async function renderFlashcards() {
           .join('')}</tbody></table></div>`
         : `<div class="empty-block"><i class="bi bi-stack"></i><p class="mb-1 fw-semibold">No cards yet</p><p class="mb-0">Ask for a lesson from zero; it ends with flashcards you can add here with one tap.</p></div>`
     }`;
+  $('#shareDeck')?.addEventListener('click', () => shareItems('cards', activeDeck || 'SmartMedicineLM flashcards', shown));
   page.querySelectorAll('[data-deck]').forEach((b) =>
     b.addEventListener('click', () => {
       deckFilter = b.dataset.deck || null;
@@ -117,7 +130,7 @@ export async function renderFlashcards() {
     })
   );
   $('#startReview')?.addEventListener('click', () => {
-    session = { queue: shownDue.slice(0, 50), shown: false, done: 0, deck: activeDeck };
+    session = { queue: (activeDeck ? shownDue : interleave(shownDue)).slice(0, 50), shown: false, done: 0, deck: activeDeck };
     renderReview();
   });
   page.querySelectorAll('[data-del-card]').forEach((b) =>
@@ -142,7 +155,7 @@ function renderReview() {
   }
   page.innerHTML = `
     <div class="page-head"><div><h2 class="page-title">Review</h2><p class="page-sub">${session.queue.length} left in this session. Try to answer out loud before revealing.</p></div>
-    <button class="btn btn-light" id="endReview" type="button">End session</button></div>
+    <div class="d-flex gap-2"><button class="btn btn-light ${state.settings.readAloud ? 'active' : ''}" id="readAloud" type="button" aria-pressed="${Boolean(state.settings.readAloud)}" title="Read cards aloud"><i class="bi bi-volume-up"></i></button><button class="btn btn-light" id="endReview" type="button">End session</button></div></div>
     <div class="review-card">
       <div class="review-face">${card.topic ? `<div class="small text-body-secondary mb-2">${escapeHtml(card.topic)}</div>` : ''}${escapeHtml(card.q)}
         ${session.shown ? `<div class="answer">${escapeHtml(card.a)}</div>` : ''}</div>
@@ -158,6 +171,15 @@ function renderReview() {
     session = null;
     renderFlashcards();
   });
+  $('#readAloud')?.addEventListener('click', () => {
+    saveSettings({ readAloud: !state.settings.readAloud });
+    if (!state.settings.readAloud) speechSynthesis?.cancel();
+    renderReview();
+  });
+  if (state.settings.readAloud && 'speechSynthesis' in window) {
+    speechSynthesis.cancel();
+    speechSynthesis.speak(new SpeechSynthesisUtterance(session.shown ? card.a : card.q));
+  }
   $('#showAnswer')?.addEventListener('click', () => {
     session.shown = true;
     renderReview();
@@ -194,4 +216,19 @@ async function classifyMissing(cards) {
   if (!missing.length) return;
   for (const c of missing) Object.assign(c, classifyCard(c, c.conceptId ? graph.get(c.conceptId) : graph.find(c.topic || '')));
   await db.putMany('flashcards', missing);
+}
+
+/** Shares cards or questions as a link that carries them (no upload). Used by study groups. */
+export async function shareItems(kind, title, items) {
+  try {
+    const url = shareUrl(await encodeShare(packItems(kind, title, items)));
+    const n = Math.min(items.length, 120);
+    if (navigator.share) await navigator.share({ title: `SmartMedicineLM: ${title}`, text: `${n} ${kind === 'cards' ? 'flashcards' : 'questions'} for you`, url });
+    else {
+      await navigator.clipboard.writeText(url);
+      toast(`Link copied: ${n} ${kind === 'cards' ? 'cards' : 'questions'}. Paste it to your study group.`, 'success', 4000);
+    }
+  } catch (err) {
+    if (err?.name !== 'AbortError') toast('Could not create the share link.', 'danger');
+  }
 }

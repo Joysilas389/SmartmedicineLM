@@ -43,6 +43,7 @@
       </button>
 
       <nav class="side-nav" aria-label="Sections">
+        <a class="side-link" href="#/today" data-nav="today"><i class="bi bi-sunrise"></i><span class="label">Today</span></a>
         <a class="side-link" href="#/chat" data-nav="chat"><i class="bi bi-chat-left-text"></i><span class="label">Chats</span></a>
         <a class="side-link" href="#/library" data-nav="library"><i class="bi bi-journal-medical"></i><span class="label">Library</span></a>
         <a class="side-link" href="#/learn" data-nav="learn"><i class="bi bi-mortarboard"></i><span class="label">Learn</span></a>
@@ -50,6 +51,9 @@
         <a class="side-link" href="#/flashcards" data-nav="flashcards"><i class="bi bi-stack"></i><span class="label">Flashcards</span><span class="badge rounded-pill ms-auto due-badge d-none" id="dueBadge"></span></a>
         <a class="side-link" href="#/progress" data-nav="progress"><i class="bi bi-graph-up"></i><span class="label">Progress</span></a>
         <div class="side-divider"></div>
+        <a class="side-link" href="#/notebook" data-nav="notebook"><i class="bi bi-journal-bookmark"></i><span class="label">Notebook</span></a>
+        <a class="side-link" href="#/practice" data-nav="practice"><i class="bi bi-calculator"></i><span class="label">Practice</span></a>
+        <a class="side-link" href="#/search" data-nav="search"><i class="bi bi-search"></i><span class="label">Search</span></a>
         <a class="side-link" href="#/knowledge" data-nav="knowledge"><i class="bi bi-diagram-3"></i><span class="label">Knowledge</span></a>
         <a class="side-link" href="#/whiteboard" data-nav="whiteboard"><i class="bi bi-easel"></i><span class="label">Whiteboard</span></a>
         <a class="side-link" href="#/sources" data-nav="sources"><i class="bi bi-bookmark-check"></i><span class="label">Sources</span></a>
@@ -317,6 +321,13 @@
     <section class="view view-page" id="view-progress" aria-label="Progress" hidden>
       <div class="page" id="progressPage"></div>
     </section>
+
+    <!-- ---------- TODAY / NOTEBOOK / PRACTICE / SEARCH / IMPORT ---------- -->
+    <section class="view view-page" id="view-today" aria-label="Today" hidden><div class="page" id="todayPage"></div></section>
+    <section class="view view-page" id="view-notebook" aria-label="Notebook" hidden><div class="page" id="notebookPage"></div></section>
+    <section class="view view-page" id="view-practice" aria-label="Practice" hidden><div class="page" id="practicePage"></div></section>
+    <section class="view view-page" id="view-search" aria-label="Search" hidden><div class="page" id="searchPage"></div></section>
+    <section class="view view-page" id="view-import" aria-label="Import shared items" hidden><div class="page" id="importPage"></div></section>
 
     <!-- ---------- WHITEBOARD ---------- -->
     <section class="view view-page" id="view-whiteboard" aria-label="Whiteboard" hidden>

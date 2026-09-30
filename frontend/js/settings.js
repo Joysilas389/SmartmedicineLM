@@ -4,6 +4,9 @@ import { semanticStatus } from './embeddings.js';
 import { dataSectionHtml, dataAction } from './data-ui.js';
 import { EXAMS } from './exams.js';
 import { LEVELS } from './levels.js';
+import { formatUsd } from './cost.js';
+
+const ROTATIONS = [['none', 'No current rotation'], ['internal', 'Internal medicine'], ['surgery', 'Surgery'], ['pediatrics', 'Pediatrics'], ['obgyn', 'Obstetrics & gynecology'], ['psychiatry', 'Psychiatry'], ['emergency', 'Emergency medicine'], ['family', 'Family medicine'], ['neurology', 'Neurology']];
 import { state, saveSettings, resetSettings, POLICY_TOGGLES } from './state.js';
 import { db } from './store.js';
 import { $, escapeHtml, toast, confirmDialog } from './ui.js';
@@ -71,6 +74,8 @@ export function renderSettings() {
         select('setExam', s.exam || 'step1', Object.entries(EXAMS).map(([k, v]) => [k, v.label])))}
       ${row('setLevel', 'Teach me as a', 'Sets how much is assumed and how deep the explanation goes. "Detect" reads it from how you ask.',
         select('setLevel', s.level || 'auto', LEVELS))}
+      ${row('setRotation', 'Current clinical rotation', 'Adds a short "On the ward" note to lessons: bedside checks, what to present, and what the shelf exam asks.',
+        select('setRotation', s.rotation || 'none', ROTATIONS))}
       ${row('setMode', 'Response mode', 'Auto adapts to how you ask (short question, from zero, review, test me).',
         select('setMode', s.mode, [['auto', 'Auto'], ['learn', 'Learn'], ['review', 'Review'], ['recall', 'Active recall']]))}
       ${row('setDepth', 'Default depth', 'Used when a full lesson is requested.',
@@ -88,6 +93,16 @@ export function renderSettings() {
       ${row('setSem', 'Semantic search', 'Finds passages by meaning as well as by words (e.g. “why do the ankles swell” finds text about oncotic pressure). Downloads a 23 MB model once, then works offline in this browser.',
         toggle('setSem', s.semanticSearch))}
       <div class="small text-body-secondary mt-1" id="semStatus">${escapeHtml(semanticStatus())}</div>
+    </section>
+
+    <section class="settings-section">
+      <h3>Cost of AI answers</h3>
+      ${row('setShowCost', 'Show estimated cost under answers', 'An estimate from the length of what is sent and received (about 4 characters per token). Your provider\'s bill is the real figure.', toggle('setShowCost', s.showCost !== false))}
+      <div class="price-row">
+        <label class="small">Input $/million tokens <input class="form-control form-control-sm" id="setPriceIn" inputmode="decimal" value="${escapeHtml(String(s.prices?.input ?? 3))}"></label>
+        <label class="small">Output $/million tokens <input class="form-control form-control-sm" id="setPriceOut" inputmode="decimal" value="${escapeHtml(String(s.prices?.output ?? 15))}"></label>
+      </div>
+      <p class="small text-body-secondary mt-2 mb-0" id="costTotal">Estimated spend: calculating…</p>
     </section>
 
     <section class="settings-section">
@@ -135,6 +150,24 @@ export function renderSettings() {
   page.querySelector('#restoreFile')?.addEventListener('change', (e) => dataAction('restore', renderSettings, e.target.files?.[0]));
   on('setSched', 'change', (e) => saveSettings({ scheduler: e.target.value }));
   on('setLevel', 'change', (e) => saveSettings({ level: e.target.value }));
+  on('setRotation', 'change', (e) => saveSettings({ rotation: e.target.value }));
+  on('setShowCost', 'change', (e) => saveSettings({ showCost: e.target.checked }));
+  const savePrices = () => {
+    const input = Number(document.getElementById('setPriceIn').value.replace(',', '.'));
+    const output = Number(document.getElementById('setPriceOut').value.replace(',', '.'));
+    if (Number.isFinite(input) && Number.isFinite(output) && input >= 0 && output >= 0) saveSettings({ prices: { input, output } });
+  };
+  on('setPriceIn', 'change', savePrices);
+  on('setPriceOut', 'change', savePrices);
+  db.all('messages').then((msgs) => {
+    const month = new Date();
+    month.setDate(1);
+    month.setHours(0, 0, 0, 0);
+    const withCost = msgs.filter((m) => m.cost);
+    const sum = (list) => list.reduce((a, m) => a + (m.cost.usd || 0), 0);
+    const el = document.getElementById('costTotal');
+    if (el) el.textContent = withCost.length ? `Estimated spend: ${formatUsd(sum(withCost.filter((m) => m.createdAt >= month.getTime())))} this month, ${formatUsd(sum(withCost))} in total (${withCost.length} answers).` : 'No answers with a cost estimate yet.';
+  });
   on('setExam', 'change', (e) => {
     saveSettings({ exam: e.target.value });
     renderSettings();

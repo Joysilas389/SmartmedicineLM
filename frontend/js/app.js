@@ -17,9 +17,11 @@ import { initAccount, renderAccountPill } from './account.js';
 import { initLocalFiles, renderBackupPill } from './data-ui.js';
 import { scheduleIndexing, invalidateVectors } from './embeddings.js';
 import { renderWhiteboard } from './whiteboard.js';
+import { renderNotebook } from './notebook.js';
+import { renderToday, renderSearch, renderPractice, renderImport } from './pages.js';
 import { invalidateIndex } from './retrieval.js';
 
-const TITLES = { library: 'Library', learn: 'Learn', flashcards: 'Flashcards', sources: 'Sources', settings: 'Settings', questions: 'Questions', progress: 'Progress', knowledge: 'Knowledge', whiteboard: 'Whiteboard' };
+const TITLES = { library: 'Library', learn: 'Learn', flashcards: 'Flashcards', sources: 'Sources', settings: 'Settings', questions: 'Questions', progress: 'Progress', knowledge: 'Knowledge', whiteboard: 'Whiteboard', today: 'Today', notebook: 'Notebook', practice: 'Practice', search: 'Search', import: 'Shared with you' };
 
 function showView(name, nav = name) {
   $$('.view').forEach((v) => (v.hidden = v.id !== `view-${name}`));
@@ -119,6 +121,31 @@ async function routeView() {
       showView('knowledge');
       setTitle(TITLES.knowledge);
       await renderKnowledge(a, params);
+      break;
+    case 'today':
+      showView('today');
+      setTitle(TITLES.today);
+      await renderToday();
+      break;
+    case 'notebook':
+      showView('notebook');
+      setTitle(TITLES.notebook);
+      await renderNotebook(params);
+      break;
+    case 'practice':
+      showView('practice');
+      setTitle(TITLES.practice);
+      await renderPractice(params);
+      break;
+    case 'search':
+      showView('search');
+      setTitle(TITLES.search);
+      await renderSearch(params);
+      break;
+    case 'import':
+      showView('import');
+      setTitle(TITLES.import);
+      await renderImport(params);
       break;
     case 'whiteboard':
       showView('whiteboard');
@@ -281,6 +308,10 @@ async function boot() {
     if (!document.querySelector('#view-chat:not([hidden]) .msg') && !document.querySelector('.q-card')) route();
   });
   setTimeout(scheduleIndexing, 3000); // index existing documents by meaning in the background
+  // Offline support for reviews (network-first, so updates are never hidden by a cache).
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
 }
 
 boot().catch((err) => {

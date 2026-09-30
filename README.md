@@ -35,6 +35,22 @@ Built from the *SmartMedicineLM Engineering Specification* (83 sections). This r
 - **Cross-device sync**: every device keeps a full local copy; changes queue in an outbox and sync in the background (last write wins), including settings. Signing out leaves the device clean; a second person on the same device never sees the first person's data.
 - **Semantic search**: passages are embedded in the browser with all-MiniLM-L6-v2 (Web Worker, WebAssembly) and fused with BM25 by reciprocal rank fusion, so "why do my ankles swell" finds a passage about oncotic pressure. No API key; a 23 MB model downloads once. Toggle in Settings.
 
+### Study system
+
+- **Today**: one screen with the day's session in order — due flashcards (interleaved across decks), open mistakes to re-test, 10 mixed questions from weak areas, your weakest concepts to re-learn, and a calculation drill — with an estimated time and your exam countdown.
+- **Notebook**: *Mistakes* (missed questions not yet answered correctly, grouped by error type, with one-tap re-tests, plus lessons you rated "lost me"), *Highlights* by ink colour (each can become a fill-in-the-blank card), *Bookmarks* (saved passages with notes), and *Reports*.
+- **Practice**: worked calculations with fresh numbers every time (anion gap, Winter's formula, A–a gradient, corrected calcium, osmolality, creatinine clearance, 2×2 tables, NNT) with step-by-step solutions; and image-reading practice on your own library images.
+- **Search** across lessons, flashcards, questions, highlights, bookmarks, concepts and library documents.
+- **Practice exam scores** (Progress): enter NBME/UWSA results; after three, a line through your own scores relates app mastery to real results, shown with its error.
+- **Full-length blocks**: 40 questions, timed at exam pace.
+- **Under every answer**: *Explain differently*, *Explain it back* (your explanation is graded), *Listen* (read aloud), *Print summary* (one page), *Report an error* (open reports are checked in future answers on that topic), *From my sources* (dims what is not cited from your documents), *Deeper / Simpler* on each section, and an estimated cost.
+- **Knowledge**: *Map it yourself* — rebuild a concept's links from memory, with distractors; *Explain it back*.
+- **Clinical rotation** (Settings): lessons add an "On the ward" note for your current rotation.
+- **Guideline flags**: management points that commonly change appear in a "Check the current guideline" box.
+- **Sharing**: share a flashcard deck or question block as a link; the items travel inside the link, nothing is uploaded.
+- **Chat tags**: tag chats and filter with `#tag` in the chat search.
+- **Offline**: once visited, flashcards, notebook, practice and saved lessons work without a connection (network-first, so updates are never hidden).
+
 ### Prompt coach
 
 As you type or paste, the app works out what you have (a topic, a passage from a book, a question vignette, lab values, a question) and offers the prompts most likely to produce understanding: for a vignette, *walk me through it*, *hint only, no answer*, *next best step* or *mechanism* depending on your exam, *what if one detail changed*; for a passage, *explain in plain language*, *what must I remember*, *what does it assume I know*; for a topic, prompts built from the knowledge graph such as *compare with its classic differential*, *why does it cause its hallmark finding* and *what do I need first*. The lightbulb in the composer opens a categorised library of prompt templates.

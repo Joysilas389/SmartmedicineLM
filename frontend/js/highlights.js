@@ -127,7 +127,8 @@ function ensureBar() {
   bar.hidden = true;
   bar.innerHTML = `<span class="hl-label"><i class="bi bi-highlighter"></i><span>Highlight</span></span>${INKS.map((i) => `<button type="button" class="hl-ink" data-ink="${i.key}" style="--ink:${i.color}" aria-label="Highlight ${i.label}"></button>`).join('')}
     <span class="hl-sep"></span>
-    <button type="button" class="hl-ink hl-eraser" data-ink="erase" aria-label="Erase highlight"><i class="bi bi-eraser"></i></button>`;
+    <button type="button" class="hl-ink hl-eraser" data-ink="erase" aria-label="Erase highlight"><i class="bi bi-eraser"></i></button>
+    <button type="button" class="hl-ink hl-eraser" data-ink="bookmark" aria-label="Bookmark this passage"><i class="bi bi-bookmark-plus"></i></button>`;
   document.body.appendChild(bar);
   bar.addEventListener('mousedown', (e) => e.preventDefault()); // keep the selection alive
   bar.addEventListener('click', async (e) => {
@@ -136,6 +137,11 @@ function ensureBar() {
     const { root, target, start, end, text } = pending;
     hideBar();
     getSelection().removeAllRanges();
+    if (b.dataset.ink === 'bookmark') {
+      await db.put('bookmarks', { id: uid('bm'), target, text: text.slice(0, 1500), note: '', createdAt: Date.now() });
+      toast('Bookmarked. Find it in Notebook → Bookmarks.', 'success', 2500);
+      return;
+    }
     await removeOverlapping(root, target, start, end);
     if (b.dataset.ink !== 'erase') {
       const h = { id: uid('hl'), target, start, end, color: b.dataset.ink, text: text.slice(0, 400), createdAt: Date.now() };

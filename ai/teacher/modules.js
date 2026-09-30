@@ -22,6 +22,7 @@ ACE inhibition :: the enzyme that makes angiotensin II is blocked
   > [!HIGHYIELD]   for exam high-yield points
   > [!ANCHOR]      for a spatial anchor / physical mental model
   > [!CLINICAL]    for bedside pearls or warnings
+  > [!CHECK]       for a recommendation to verify against the current guideline
   > [!NOTE]        for anything else worth isolating
 - Tables: use Markdown tables for comparisons (differentials, drug classes).
 - For approximate values write "≈" or "about" (≈80%, about 10 mg), never a tilde (~).

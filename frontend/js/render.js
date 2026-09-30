@@ -47,6 +47,7 @@ const CALLOUTS = {
   ANCHOR: { cls: 'anchor', icon: 'bi-geo-alt', title: 'Spatial anchor' },
   CLINICAL: { cls: 'clinical', icon: 'bi-heart-pulse', title: 'Clinical pearl' },
   NOTE: { cls: 'note', icon: 'bi-info-circle', title: 'Note' },
+  CHECK: { cls: 'check', icon: 'bi-patch-check', title: 'Check the current guideline' },
   WARNING: { cls: 'clinical', icon: 'bi-exclamation-triangle', title: 'Caution' },
 };
 

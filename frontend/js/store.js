@@ -5,15 +5,15 @@
  * pushes those changes to the server (last write wins on the `_u` timestamp).
  */
 const DB_NAME = 'smartmedicinelm';
-const VERSION = 4;
+const VERSION = 5;
 const OPEN_TIMEOUT = 8000;
 const RETRY_AFTER = 5000; // after a failure, fail fast for a moment so pages can explain themselves
 let dbPromise;
 let lastFailure = null;
 
-export const STORES = ['chats', 'messages', 'documents', 'files', 'chunks', 'flashcards', 'questions', 'blocks', 'attempts', 'mastery', 'graph', 'reviews', 'vectors', 'boards', 'highlights', 'outbox', 'meta'];
+export const STORES = ['chats', 'messages', 'documents', 'files', 'chunks', 'flashcards', 'questions', 'blocks', 'attempts', 'mastery', 'graph', 'reviews', 'vectors', 'boards', 'highlights', 'bookmarks', 'scores', 'reports', 'outbox', 'meta'];
 /** Stores mirrored to the server. Raw files and embedding vectors stay on the device. */
-export const SYNCED = new Set(['chats', 'messages', 'documents', 'chunks', 'flashcards', 'questions', 'blocks', 'attempts', 'mastery', 'graph', 'reviews', 'boards', 'highlights']);
+export const SYNCED = new Set(['chats', 'messages', 'documents', 'chunks', 'flashcards', 'questions', 'blocks', 'attempts', 'mastery', 'graph', 'reviews', 'boards', 'highlights', 'bookmarks', 'scores', 'reports']);
 
 function open() {
   if (dbPromise) return dbPromise;
@@ -50,6 +50,12 @@ function open() {
       if (old < 4) {
         // Highlights the learner paints over lesson and document text.
         db.createObjectStore('highlights', { keyPath: 'id' }).createIndex('target', 'target');
+      }
+      if (old < 5) {
+        // Bookmarked passages, real practice-exam scores, and learner error reports.
+        db.createObjectStore('bookmarks', { keyPath: 'id' });
+        db.createObjectStore('scores', { keyPath: 'id' });
+        db.createObjectStore('reports', { keyPath: 'id' });
       }
     };
     let blocked = false;

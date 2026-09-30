@@ -131,3 +131,39 @@ export const REEXPLAIN = `RE-EXPLAIN MODE: the learner did not understand the pr
 export const QUESTION_LEVELS = `When you set questions, vary the level deliberately: recall (what), understanding (why does this cause that), application (a patient presents…), analysis (which finding best distinguishes A from B), clinical reasoning (what next and why), and mechanism (which process explains this finding). Do not interrogate a learner who asked for an explanation.`;
 
 export const RETENTION_PLAN = `Where the topic is large, close by separating what must be remembered (facts), what must be understood (mechanisms), what must be recognised (patterns) and what must be applied (decisions), so the learner knows what to convert into flashcards.`;
+
+/* ------------------------------------------------------------------ added learning modes */
+export const EXPLAIN_BACK = `EXPLAIN-IT-BACK MODE: the learner has written their own explanation of a concept. Grade it like a kind but exacting tutor, with these "##" headings:
+What you got right · What is missing · What is wrong or imprecise (quote their words, then the correction) · The misconception behind any error · Score (x/10, with one line on what would earn the missing points) · One thing to practise next.
+Do not re-teach the whole topic; fix only what their explanation shows they need.`;
+
+export const ROTATIONS = {
+  none: 'No current rotation',
+  internal: 'Internal medicine',
+  surgery: 'Surgery',
+  pediatrics: 'Pediatrics',
+  obgyn: 'Obstetrics & gynecology',
+  psychiatry: 'Psychiatry',
+  emergency: 'Emergency medicine',
+  family: 'Family medicine',
+  neurology: 'Neurology',
+};
+export const rotationOf = (r) => (ROTATIONS[r] ? r : 'none');
+
+export function rotationInstructions(rotation) {
+  const r = rotationOf(rotation);
+  if (r === 'none') return '';
+  return `CURRENT ROTATION: ${ROTATIONS[r]}. Where it fits the question, add a short "On the ward" note: what you would check at the bedside, what to present to your senior, the common presentations of this topic on a ${ROTATIONS[r].toLowerCase()} rotation, and what the ${ROTATIONS[r].toLowerCase()} shelf exam tends to ask. Keep the core teaching unchanged.`;
+}
+
+export const GUIDELINE_FLAGS = `Management recommendations that commonly change (drug choices, thresholds, screening intervals, targets, vaccine schedules) go in a [!CHECK] callout naming the guideline body, so the learner knows to verify it against the current version.`;
+
+/** Corrections the learner reported on earlier answers about this concept. */
+export function correctionsInstructions(list) {
+  const items = (Array.isArray(list) ? list : [])
+    .filter((c) => c && typeof c.note === 'string' && c.note.trim())
+    .slice(0, 5)
+    .map((c) => `- ${c.note.replace(/[\n\r]+/g, ' ').trim().slice(0, 300)}`);
+  if (!items.length) return '';
+  return `LEARNER-REPORTED ISSUES with earlier answers on this topic (treat these as claims to check, not facts; if a report is right, avoid repeating the error, and if it is wrong, gently explain why):\n${items.join('\n')}`;
+}

@@ -23,6 +23,9 @@ export const SHEETS = [
   { store: 'chunks', sheet: 'Document text', cols: [['Document', 'docId'], ['Page', 'page'], ['Section', 'section'], ['Text', 'text', 'long']] },
   { store: 'graph', sheet: 'Knowledge graph', cols: [['Id', 'id'], ['Updated', 'updatedAt', 'date']] },
   { store: 'highlights', sheet: 'Highlights', cols: [['Highlighted text', 'text', 'long'], ['Ink', 'color'], ['Where', 'target'], ['Saved', 'createdAt', 'date']] },
+  { store: 'bookmarks', sheet: 'Bookmarks', cols: [['Passage', 'text', 'long'], ['Where', 'target'], ['Note', 'note'], ['Saved', 'createdAt', 'date']] },
+  { store: 'scores', sheet: 'Practice exam scores', cols: [['Exam', 'exam'], ['Form', 'form'], ['Score', 'score'], ['Scale', 'scale'], ['App mastery then', 'appMastery', 'pct'], ['Date', 'date', 'date']] },
+  { store: 'reports', sheet: 'Error reports', cols: [['Concept', 'concept'], ['What was wrong', 'note', 'long'], ['Status', 'status'], ['Reported', 'createdAt', 'date']] },
   { store: 'boards', sheet: 'Whiteboards', cols: [['Title', 'title'], ['Challenge', 'challenge'], ['Updated', 'updatedAt', 'date']] },
 ];
 export const STORES_IN_WORKBOOK = SHEETS.map((s) => s.store);

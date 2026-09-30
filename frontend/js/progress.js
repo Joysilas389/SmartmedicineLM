@@ -9,6 +9,8 @@ import { forecast } from './srs.js';
 import { buildPlan, PHASE_LABEL } from './study-plan.js';
 import { composeAndSend } from './chat.js';
 import { examLabel } from './exams.js';
+import { uid, formatDate } from './ui.js';
+import { fitLine } from './notebook-pure.js';
 
 const pct = (v) => (v == null ? '–' : `${Math.round(v * 100)}%`);
 const bar = (v, cls = '') => `<span class="mbar ${cls}"><span style="width:${v == null ? 0 : Math.round(v * 100)}%"></span></span>`;
@@ -128,11 +130,15 @@ export async function renderProgress() {
           .join('')}</div></section>
     </div>
 
+    <h3 class="section-title mt-4">Practice exam scores</h3>
+    <div id="scoresBox"></div>
+
     <h3 class="section-title mt-4" id="plan">Study plan</h3>
     <div id="planBox"></div>`;
 
   $$('[data-teach]', $('#progressPage')).forEach((b) => b.addEventListener('click', () => composeAndSend(`Teach me ${b.dataset.teach} from absolute zero.`)));
   renderPlan(fc);
+  renderScores(overall);
 }
 
 function errorAdvice(type) {
@@ -221,4 +227,45 @@ function renderPlan(fc) {
     renderPlan(fc);
     toast('Study plan saved.', 'success', 2000);
   });
+}
+
+/* ---------------- practice exam anchoring ---------------- */
+async function renderScores(overall) {
+  const box = $('#scoresBox');
+  if (!box) return;
+  const scores = (await db.all('scores')).sort((a, b) => a.date - b.date);
+  const pts = scores.filter((s) => s.appMastery != null && Number.isFinite(Number(s.score))).map((s) => ({ x: s.appMastery, y: Number(s.score) }));
+  const line = fitLine(pts);
+  const projected = line && overall != null ? line.predict(overall) : null;
+  const ys = scores.map((s) => Number(s.score)).filter(Number.isFinite);
+  const chart = ys.length >= 2 ? (() => {
+    const W = 320, H = 110, lo = Math.min(...ys) - 5, hi = Math.max(...ys) + 5;
+    const x = (i) => 16 + (i / (ys.length - 1)) * (W - 32);
+    const y = (v) => H - 14 - ((v - lo) / (hi - lo || 1)) * (H - 28);
+    return `<svg viewBox="0 0 ${W} ${H}" class="score-chart" role="img" aria-label="Practice exam scores over time"><polyline fill="none" stroke="var(--sm-hema)" stroke-width="2.5" points="${ys.map((v, i) => `${x(i)},${y(v)}`).join(' ')}"/>${ys.map((v, i) => `<circle cx="${x(i)}" cy="${y(v)}" r="4" fill="var(--sm-hema)"/><text x="${x(i)}" y="${y(v) - 8}" text-anchor="middle" font-size="10" fill="currentColor">${v}</text>`).join('')}</svg>`;
+  })() : '';
+  box.innerHTML = `<p class="small text-body-secondary">Enter your real practice-test results (NBME, UWSA, Free 120…). They anchor your progress to reality: the app's own percentages only describe what you have done inside the app.</p>
+    ${chart}
+    ${projected != null ? `<div class="note-box small mb-2"><i class="bi bi-graph-up me-1"></i>At your current app mastery (${pct(overall)}), your past results suggest a practice score of about <b>${Math.round(projected)}</b> (typical error ± ${Math.round(line.resid)}). This is a rough line through ${pts.length} of your own scores, not a prediction of the real exam.</div>`
+      : scores.length ? `<p class="small text-body-secondary">Add ${Math.max(0, 3 - pts.length)} more score${3 - pts.length === 1 ? '' : 's'} to see a projection calibrated to your own results.</p>` : ''}
+    ${scores.length ? `<div class="table-responsive"><table class="table table-sm week-table"><thead><tr><th>Date</th><th>Test</th><th class="text-end">Score</th><th class="text-end d-none d-sm-table-cell">App mastery then</th><th></th></tr></thead><tbody>
+      ${scores.slice().reverse().map((s2) => `<tr><td>${formatDate(s2.date)}</td><td>${escapeHtml(s2.form || s2.exam)}</td><td class="text-end"><b>${escapeHtml(String(s2.score))}</b>${s2.scale ? ` <small class="text-body-secondary">${escapeHtml(s2.scale)}</small>` : ''}</td><td class="text-end d-none d-sm-table-cell">${pct(s2.appMastery)}</td><td class="text-end"><button class="btn btn-sm btn-link text-danger p-0" data-del-score="${s2.id}" aria-label="Delete">×</button></td></tr>`).join('')}</tbody></table></div>` : ''}
+    <form class="plan-form" id="scoreForm">
+      <div><label class="form-label small" for="scForm">Test</label><input class="form-control form-control-sm" id="scForm" placeholder="e.g. NBME 30" required></div>
+      <div><label class="form-label small" for="scScore">Score</label><input class="form-control form-control-sm" id="scScore" inputmode="decimal" placeholder="e.g. 231 or 68" required></div>
+      <div><label class="form-label small" for="scScale">Scale</label><select class="form-select form-select-sm" id="scScale"><option value="3-digit">3-digit</option><option value="%">% correct</option><option value="pass-prob">Pass probability %</option></select></div>
+      <div><label class="form-label small" for="scDate">Date</label><input type="date" class="form-control form-control-sm" id="scDate" value="${new Date().toISOString().slice(0, 10)}"></div>
+      <div class="plan-go"><button class="btn btn-sm btn-primary" type="submit">Add score</button></div>
+    </form>`;
+  $('#scoreForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const score = Number($('#scScore').value.replace(',', '.'));
+    if (!Number.isFinite(score)) return;
+    await db.put('scores', { id: uid('sc'), exam: examLabel(), form: $('#scForm').value.trim(), score, scale: $('#scScale').value, date: new Date(`${$('#scDate').value}T12:00:00`).getTime(), appMastery: overall });
+    renderScores(overall);
+  });
+  box.querySelectorAll('[data-del-score]').forEach((b) => b.addEventListener('click', async () => {
+    await db.del('scores', b.dataset.delScore);
+    renderScores(overall);
+  }));
 }

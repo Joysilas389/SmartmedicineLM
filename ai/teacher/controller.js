@@ -21,7 +21,7 @@ export const DEFAULT_POLICY = Object.freeze({
   ghana_context: false,
 });
 
-export const MODES = ['learn', 'review', 'recall', 'concise', 'standard', 'compare', 'case', 'reexplain', 'image', 'image_quiz', 'image_eval', 'continue'];
+export const MODES = ['learn', 'review', 'recall', 'concise', 'standard', 'compare', 'case', 'reexplain', 'explainback', 'image', 'image_quiz', 'image_eval', 'continue'];
 export const DEPTHS = ['quick', 'standard', 'deep', 'comprehensive'];
 export const KNOWLEDGE_MODES = ['hybrid', 'library', 'general'];
 
@@ -53,6 +53,7 @@ export function detectIntent(text = '', hasImages = false) {
 
 /** Combines the learner's explicit mode choice with the detected intent. */
 export function resolveMode(controls = {}, text = '', hasImages = false) {
+  if (controls.explainBack === true && !hasImages) return 'explainback';
   // Image practice (Phase 3): the learner reads the image first, then is evaluated.
   if (hasImages && controls.imageTask === 'quiz') return 'image_quiz';
   if (!hasImages && controls.imageEval === true && !/^(please )?(continue|carry on)\b/i.test(text.trim())) return 'image_eval';
@@ -75,6 +76,7 @@ const TOKEN_BUDGET = {
   recall: { quick: 1000, standard: 1500, deep: 2500, comprehensive: 3000 },
   standard: { quick: 1500, standard: 3000, deep: 6000, comprehensive: 9000 },
   compare: { quick: 1200, standard: 2500, deep: 4500, comprehensive: 7000 },
+  explainback: { quick: 1500, standard: 2500, deep: 3500, comprehensive: 4500 },
   case: { quick: 1200, standard: 2200, deep: 3500, comprehensive: 5000 },
   reexplain: { quick: 1000, standard: 2000, deep: 3500, comprehensive: 5000 },
   image: { quick: 1500, standard: 3000, deep: 6000, comprehensive: 9000 },
@@ -119,6 +121,8 @@ When the learner answers in a later turn, evaluate each answer with these headin
       return `MODE: CLINICAL CASE. ${depthLine}\n${P.CASE_ENGINE}`;
     case 'reexplain':
       return P.REEXPLAIN;
+    case 'explainback':
+      return P.EXPLAIN_BACK;
     case 'image_quiz':
       return M.imagePracticeInstructions(imageKind);
     case 'image_eval':
@@ -242,6 +246,11 @@ export function buildTeachingRequest(body = {}) {
   if (policy.ghana_context) parts.push(M.GHANA);
   if (mode === 'recall' || mode === 'case') parts.push(P.QUESTION_LEVELS);
   if (full && ['deep', 'comprehensive'].includes(depth)) parts.push(P.RETENTION_PLAN);
+  if (full && policy.treatment_mechanism) parts.push(P.GUIDELINE_FLAGS);
+  const rotation = P.rotationInstructions(controls.rotation);
+  if (rotation && teaching && !lean) parts.push(rotation);
+  const corrections = P.correctionsInstructions(body.corrections);
+  if (corrections && teaching) parts.push(corrections);
   parts.push(P.EVIDENCE, P.REAL_PATIENT, M.SAFETY);
   if (teaching && !lean) parts.push(P.QUALITY_CHECK);
   const imageKind = M.IMAGE_KINDS.includes(controls.imageKind) ? controls.imageKind : 'auto';

@@ -16,6 +16,7 @@ import { renderMessage } from './render.js';
 import { addCards } from './flashcards.js';
 import { composeAndSend } from './chat.js';
 import { EXAMS, examKey, examShort, currentExam } from './exams.js';
+import { shareItems } from './flashcards.js';
 
 const FIRST_BATCH = 2; // start answering sooner
 const BATCH = 3; // small batches never hit the length limit
@@ -31,6 +32,19 @@ let form = { exam: null, source: 'topics', topic: '', system: '', count: 5, mode
 const page = () => $('#questionsPage');
 
 /* ============================== entry ============================== */
+/** Starts a block from questions already in the bank (mistake re-tests, shared blocks). */
+export async function startBankBlock(ids, label = 'Question bank review', mode = 'tutor') {
+  location.hash = '#/questions';
+  await new Promise((r) => setTimeout(r, 0));
+  await loadKnowledge();
+  bank = new Map();
+  await loadBank(ids);
+  const found = ids.filter((id) => bank.has(id));
+  if (!found.length) return toast('Those questions are no longer in your bank.', 'warning');
+  block = { id: uid('blk'), createdAt: Date.now(), label, source: 'bank', mode, planned: found.length, questionIds: found, answers: {}, status: 'active', endsAt: null };
+  await beginSession();
+}
+
 export async function renderQuestions(params = {}) {
   await loadKnowledge();
   clearInterval(timer);
@@ -38,7 +52,7 @@ export async function renderQuestions(params = {}) {
     form.source = ['topics', 'weak', 'library', 'bank'].includes(params.source) ? params.source : 'topics';
     form.topic = params.concept || '';
     if (params.system !== undefined) form.system = SYSTEMS.includes(params.system) ? params.system : '';
-    if ([5, 10, 20].includes(Number(params.count))) form.count = Number(params.count);
+    if ([5, 10, 20, 40].includes(Number(params.count))) form.count = Number(params.count);
     if (['tutor', 'exam'].includes(params.mode)) form.mode = params.mode;
     if (view.name !== 'session') view = { name: 'home' };
   }
@@ -91,7 +105,7 @@ async function renderHome() {
         <div><label class="form-label small" for="qExam">Exam</label>
           <select class="form-select form-select-sm" id="qExam">${Object.entries(EXAMS).map(([k, v]) => `<option value="${k}" ${(form.exam || currentExam()) === k ? 'selected' : ''}>${v.short}</option>`).join('')}</select></div>
         <div><label class="form-label small" for="qCount">Questions</label>
-          <select class="form-select form-select-sm" id="qCount">${[5, 10, 20].map((n) => `<option ${form.count === n ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+          <select class="form-select form-select-sm" id="qCount">${[5, 10, 20, 40].map((n) => `<option value="${n}" ${form.count === n ? 'selected' : ''}>${n === 40 ? '40 (full-length)' : n}</option>`).join('')}</select></div>
         <div><label class="form-label small" for="qMode">Mode</label>
           <select class="form-select form-select-sm" id="qMode">
             <option value="tutor" ${form.mode === 'tutor' ? 'selected' : ''}>Tutor</option>
@@ -833,6 +847,7 @@ function renderResults() {
       .join('')}</div>
     <div class="d-flex flex-wrap gap-2 mt-3">
       ${missed.length ? `<button class="btn btn-outline-primary" data-r="retry"><i class="bi bi-arrow-repeat me-1"></i>Retry ${missed.length} missed</button>` : ''}
+      <button class="btn btn-outline-secondary" data-r="share"><i class="bi bi-share me-1"></i>Share this block</button>
       <button class="btn btn-light" data-r="home">New block</button>
     </div>
     <div id="qReveal" class="mt-3"></div>`;
@@ -852,6 +867,7 @@ function renderResults() {
         await renderReveal($('#rvBody'), q, block.answers[q.id] || {});
         host.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
+      if (r === 'share') return shareItems('questions', block.label, qs);
       if (r === 'retry') {
         const ids = missed.map((q) => q.id);
         block = { id: uid('blk'), createdAt: Date.now(), label: `Retry: ${block.label}`, source: 'bank', mode: 'tutor', planned: ids.length, questionIds: ids, answers: {}, status: 'active', endsAt: null };

@@ -7,6 +7,7 @@ import { planFor, mergeLessonBlock, recordEvidence } from './knowledge-store.js'
 import { enableHighlighting } from './highlights.js';
 import { suggestPrompts, classifyInput, PROMPT_LIBRARY, firstPlaceholder } from './prompt-coach.js';
 import { graph } from './knowledge-store.js';
+import { estimateCost, formatUsd, SYSTEM_PROMPT_CHARS } from './cost.js';
 import { checkCitations } from './validators.js';
 import { search } from './retrieval.js';
 import { imageForModel, classifyFile } from './ingestion.js';
@@ -150,7 +151,12 @@ export function renderChatList() {
   }
   const chats = state.chats
     .filter((c) => (state.showArchived ? c.archived : !c.archived))
-    .filter((c) => !q || c.title.toLowerCase().includes(q))
+    .filter((c) => {
+      if (!q) return true;
+      // "#renal" filters by tag; anything else searches titles and tags.
+      if (q.startsWith('#')) return (c.tags || []).some((t) => t.toLowerCase().startsWith(q.slice(1)));
+      return c.title.toLowerCase().includes(q) || (c.tags || []).some((t) => t.toLowerCase().includes(q));
+    })
     .sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0) || b.updatedAt - a.updatedAt);
   if (!chats.length) {
     els.list.innerHTML = `<li class="chat-list-empty">${q ? 'No chats match your search.' : state.showArchived ? 'No archived chats.' : 'Your chats will appear here.'}</li>`;
@@ -160,11 +166,12 @@ export function renderChatList() {
   els.list.innerHTML = shown
     .map(
       (c) => `<li class="chat-item${c.id === state.currentChatId ? ' active' : ''}" data-id="${c.id}">
-      <a href="#/chat/${c.id}" title="${escapeHtml(c.title)}">${c.favorite ? '<i class="bi bi-star-fill"></i>' : ''}${escapeHtml(c.title)}</a>
+      <a href="#/chat/${c.id}" title="${escapeHtml(c.title)}">${c.favorite ? '<i class="bi bi-star-fill"></i>' : ''}<span class="chat-title-text">${escapeHtml(c.title)}</span>${(c.tags || []).length ? `<span class="chat-tags">${c.tags.map((t) => `<span>#${escapeHtml(t)}</span>`).join('')}</span>` : ''}</a>
       <div class="dropdown">
         <button class="btn-icon" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Options for ${escapeHtml(c.title)}"><i class="bi bi-three-dots"></i></button>
         <ul class="dropdown-menu dropdown-menu-end">
           <li><button class="dropdown-item" data-act="rename">Rename</button></li>
+          <li><button class="dropdown-item" data-act="tags">Tags…</button></li>
           <li><button class="dropdown-item" data-act="favorite">${c.favorite ? 'Remove from favourites' : 'Add to favourites'}</button></li>
           <li><button class="dropdown-item" data-act="export">Export</button></li>
           <li><button class="dropdown-item" data-act="archive">${c.archived ? 'Unarchive' : 'Archive'}</button></li>
@@ -206,6 +213,12 @@ async function chatAction(action, chat) {
   if (action === 'rename') {
     const name = await promptDialog('Rename chat', chat.title, 'Chat name');
     if (name) await updateChat(chat, { title: name });
+  } else if (action === 'tags') {
+    const raw = await promptDialog('Tags', (chat.tags || []).join(', '), 'Comma-separated, e.g. renal, step1, rotation');
+    if (raw === null) return;
+    const tags = [...new Set(raw.split(',').map((t) => t.trim().replace(/^#/, '').toLowerCase().replace(/\s+/g, '-')).filter(Boolean))].slice(0, 8);
+    await updateChat(chat, { tags }, false);
+    renderChatList();
   } else if (action === 'favorite') {
     await updateChat(chat, { favorite: !chat.favorite }, false);
   } else if (action === 'archive') {
@@ -295,13 +308,16 @@ export function updateTopbar() {
 }
 
 /** Used by Learn, the viewer and the library to start a prompt programmatically. */
-export async function composeAndSend(text, { pinned = null, images = [], newChat = true, docIds = null } = {}) {
+export async function composeAndSend(text, { pinned = null, images = [], newChat = true, docIds = null, imageTask = null, imageKind = null, explainBack = false } = {}) {
   location.hash = '#/chat';
   await new Promise((r) => setTimeout(r, 0));
   if (newChat) startNewChat({ focus: false });
   if (docIds) state.pendingScope = docIds;
   composer.pinned = pinned;
   composer.images.push(...images);
+  if (imageTask) composer.imageTask = imageTask;
+  if (imageKind) composer.imageKind = imageKind;
+  composer.explainBack = explainBack;
   els.input.value = text;
   autosize();
   renderChips();
@@ -378,6 +394,8 @@ async function send() {
   const images = composer.images.splice(0);
   const pinned = composer.pinned;
   composer.pinned = null;
+  const explainBack = Boolean(composer.explainBack);
+  composer.explainBack = false;
   const imageKind = composer.imageKind;
   const imageTask = images.length ? composer.imageTask : null;
   composer.imageTask = 'explain';
@@ -391,6 +409,7 @@ async function send() {
     imageData: images.length ? images.map(({ mediaType, data }) => ({ mediaType, data })) : undefined,
     imageKind: images.length ? imageKind : undefined,
     imageTask: imageTask || undefined,
+    explainBack: explainBack || undefined,
     context: pinned
       ? `${pinned.title}, p. ${pinned.page}`
       : images.length && (imageKind !== 'auto' || imageTask === 'quiz')
@@ -464,7 +483,14 @@ async function runAssistant(chat, userMsg, images, pinned) {
     console.warn('Prerequisite engine failed', err);
   }
 
+  let corrections = [];
+  if (prereq?.concept) {
+    try {
+      corrections = (await db.all('reports')).filter((r) => r.status !== 'resolved' && r.concept === prereq.concept).map((r) => ({ note: r.note }));
+    } catch { /* optional */ }
+  }
   const payload = {
+    corrections,
     prerequisites: prereq,
     messages: [...history, { role: 'user', content: userMsg.content, images: images.map(({ mediaType, data }) => ({ mediaType, data })) }],
     sources: sources.map(({ tag, docName, page, section, text }) => ({ tag, docName, page, section, text })),
@@ -479,6 +505,8 @@ async function runAssistant(chat, userMsg, images, pinned) {
       imageKind: userMsg.imageKind || imageSource?.imageKind || 'auto',
       imageTask: userMsg.imageTask || 'explain',
       imageEval,
+      explainBack: Boolean(userMsg.explainBack),
+      rotation: s.rotation || 'none',
     },
   };
   lastRequest = { chat, userMsg, images, pinned };
@@ -566,6 +594,10 @@ async function runAssistant(chat, userMsg, images, pinned) {
   }
   renderLessonCheck(node, aiMsg);
   enableHighlighting(node.querySelector('.prose'), `msg:${aiMsg.id}`);
+  addSectionDials(node.querySelector('.prose'));
+  addSourcesToggle(node, aiMsg);
+  aiMsg.cost = estimateCost(JSON.stringify(payload.messages).length + SYSTEM_PROMPT_CHARS, text.length, state.settings.prices || undefined);
+  renderCost(node, aiMsg);
   await db.put('messages', aiMsg);
   await updateChat(chat, {});
   if (nearBottom()) scrollToBottom();
@@ -597,7 +629,11 @@ async function appendMessage(m, { streaming = false } = {}) {
       <div class="msg-sources"></div>
       <div class="msg-check"></div>
       <div class="msg-actions">
-        <button class="msg-act" data-action="reexplain" title="Explain this differently"><i class="bi bi-arrow-repeat"></i><span>Explain differently</span></button><button class="btn-icon" data-action="copy" type="button" aria-label="Copy response" title="Copy"><i class="bi bi-copy"></i></button></div>`;
+        <button class="msg-act" data-action="reexplain" title="Explain this differently"><i class="bi bi-arrow-repeat"></i><span>Explain differently</span></button>
+        <button class="msg-act" data-action="explainback" title="Explain it back in your own words and get graded"><i class="bi bi-chat-square-quote"></i><span>Explain it back</span></button>
+        <button class="btn-icon" data-action="listen" type="button" aria-label="Listen" title="Listen"><i class="bi bi-volume-up"></i></button>
+        <button class="btn-icon" data-action="print" type="button" aria-label="Print summary" title="Print a one-page summary"><i class="bi bi-printer"></i></button>
+        <button class="btn-icon" data-action="report" type="button" aria-label="Report an error" title="Report an error in this answer"><i class="bi bi-flag"></i></button><button class="btn-icon" data-action="copy" type="button" aria-label="Copy response" title="Copy"><i class="bi bi-copy"></i></button></div>`;
     setModeTag(el, m.mode);
     if (!streaming) {
       const body = el.querySelector('.prose');
@@ -606,7 +642,12 @@ async function appendMessage(m, { streaming = false } = {}) {
       renderSources(el, m);
       renderPrereq(el, m);
       renderLessonCheck(el, m);
-      if (m.role === 'assistant' && !m.error) enableHighlighting(body, `msg:${m.id}`);
+      renderCost(el, m);
+      if (m.role === 'assistant' && !m.error) {
+        enableHighlighting(body, `msg:${m.id}`);
+        addSectionDials(body);
+        addSourcesToggle(el, m);
+      }
     }
   }
   els.thread.appendChild(el);
@@ -707,6 +748,30 @@ async function onThreadClick(e) {
     act.disabled = true;
     act.innerHTML = `<i class="bi bi-check2 me-1"></i>Added ${n}`;
     toast(`${n} card${n === 1 ? '' : 's'} added to your deck.`, 'success');
+  } else if (act.dataset.action === 'explainback') {
+    els.input.value = 'In my own words: ';
+    composer.explainBack = true;
+    autosize();
+    els.input.focus();
+    els.input.setSelectionRange(els.input.value.length, els.input.value.length);
+    toast('Write your explanation, then send it to be graded.', 'info', 3500);
+  } else if (act.dataset.action === 'listen') {
+    speak(act.closest('.msg').querySelector('.prose'), act);
+  } else if (act.dataset.action === 'print') {
+    printSummary(act.closest('.msg'));
+  } else if (act.dataset.action === 'report') {
+    const msg = await db.get('messages', act.closest('.msg').dataset.id);
+    const note = await promptDialog('Report an error', '', 'What is wrong in this answer? (It will be checked in future answers on this topic.)');
+    if (!note) return;
+    await db.put('reports', { id: uid('rep'), msgId: msg?.id, chatId: msg?.chatId, concept: msg?.concept || currentChat()?.title?.replace(/ — .*/, '') || '', note: note.slice(0, 600), status: 'open', createdAt: Date.now() });
+    toast('Thanks. Future answers on this topic will check this point.', 'success', 3500);
+  } else if (act.dataset.action === 'sources-view') {
+    const prose = act.closest('.msg').querySelector('.prose');
+    prose.classList.toggle('src-view');
+    act.classList.toggle('on', prose.classList.contains('src-view'));
+  } else if (act.dataset.action === 'section') {
+    els.input.value = `${act.dataset.dir === 'deeper' ? 'Go deeper on' : 'Explain more simply'} the section "${act.dataset.heading}" of your last answer.`;
+    send();
   } else if (act.dataset.action === 'reexplain') {
     composeAndSend("I don't understand that explanation. Please explain it differently, from first principles.");
   } else if (act.dataset.action === 'rate') {
@@ -1005,4 +1070,90 @@ function buildPromptLibrary() {
     const ph = firstPlaceholder(template);
     if (ph) els.input.setSelectionRange(ph.start, ph.end); // type straight over the placeholder
   });
+}
+
+/** Small "≈ $0.03" note under an answer: an estimate from characters, labelled as such. */
+function renderCost(el, m) {
+  if (!m.cost || !state.settings.showCost) return;
+  const box = el.querySelector('.msg-actions');
+  if (!box || box.querySelector('.msg-cost')) return;
+  box.insertAdjacentHTML('beforeend', `<span class="msg-cost" title="Estimated from length: about ${m.cost.inTok.toLocaleString()} tokens in, ${m.cost.outTok.toLocaleString()} out">≈ ${formatUsd(m.cost.usd)}</span>`);
+}
+
+/** "Deeper · Simpler" on each main section of a lesson. */
+function addSectionDials(prose) {
+  if (!prose) return;
+  prose.querySelectorAll('h2').forEach((h) => {
+    if (h.querySelector('.sec-dial')) return;
+    const heading = h.textContent.trim().slice(0, 80).replace(/"/g, "'");
+    h.insertAdjacentHTML('beforeend', `<span class="sec-dial" data-no-highlight><button type="button" data-action="section" data-dir="deeper" data-heading="${escapeHtml(heading)}" title="Go deeper on this section">Deeper</button><button type="button" data-action="section" data-dir="simpler" data-heading="${escapeHtml(heading)}" title="Explain this section more simply">Simpler</button></span>`);
+  });
+}
+
+/** When an answer cites your documents, a toggle dims everything that is not cited. */
+function addSourcesToggle(el, m) {
+  if (!m.sources?.length || !el.querySelector('.prose .cite, .prose [data-cite], .prose a.citation')) return;
+  const box = el.querySelector('.msg-actions');
+  if (!box || box.querySelector('[data-action="sources-view"]')) return;
+  box.insertAdjacentHTML('afterbegin', `<button class="msg-act" data-action="sources-view" title="Show which parts come from your documents"><i class="bi bi-journal-check"></i><span>From my sources</span></button>`);
+}
+
+/* ---- audio: read an answer aloud in short chunks (long utterances get cut off on phones) ---- */
+function speak(prose, btn) {
+  if (!('speechSynthesis' in window)) return toast('Your browser cannot read aloud.', 'warning');
+  if (speechSynthesis.speaking) {
+    speechSynthesis.cancel();
+    btn.classList.remove('on');
+    return;
+  }
+  const clone = prose.cloneNode(true);
+  clone.querySelectorAll('pre, svg, .diagram, .sec-dial, .chain-tools, .flashcards').forEach((n) => n.remove());
+  const text = clone.innerText.replace(/[↑]/g, ' increased ').replace(/[↓]/g, ' decreased ').replace(/→/g, ' leads to ').replace(/\s+/g, ' ').trim();
+  const chunks = text.match(/[^.!?]+[.!?]*/g) || [text];
+  btn.classList.add('on');
+  chunks.forEach((c, i) => {
+    const u = new SpeechSynthesisUtterance(c.trim());
+    u.rate = 1;
+    if (i === chunks.length - 1) u.onend = () => btn.classList.remove('on');
+    speechSynthesis.speak(u);
+  });
+}
+
+/* ---- print: the lesson's summary section if it has one, otherwise the whole lesson ---- */
+function printSummary(msgEl) {
+  const prose = msgEl.querySelector('.prose');
+  const heads = [...prose.querySelectorAll('h2, h3')];
+  const start = heads.find((h) => /five things|synthesis|summary|must[- ]know|mental model|remember/i.test(h.textContent));
+  const parts = [];
+  if (start) {
+    for (let n = start; n; n = n.nextElementSibling) parts.push(n.cloneNode(true));
+  } else parts.push(prose.cloneNode(true));
+  const holder = document.createElement('div');
+  parts.forEach((p) => holder.appendChild(p));
+  holder.querySelectorAll('.sec-dial, .chain-tools, button').forEach((n) => n.remove());
+  const title = currentChat()?.title || 'SmartMedicineLM';
+  const w = window.open('', '_blank');
+  if (!w) return toast('Allow pop-ups to print.', 'warning');
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>body{font-family:"Source Sans 3","Source Sans Pro",Arial,sans-serif;max-width:720px;margin:24px auto;padding:0 18px;color:#111;line-height:1.5}
+    h1{font-size:1.4rem;margin:0 0 4px}h2{font-size:1.1rem;margin:18px 0 6px}.meta{color:#666;font-size:.85rem;margin-bottom:14px}
+    svg{max-width:100%;height:auto}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:4px 6px;font-size:.9rem}
+    .callout{border:1px solid #ccc;border-radius:8px;padding:8px 12px;margin:10px 0}@media print{a{color:inherit;text-decoration:none}}</style></head>
+    <body><h1>${escapeHtml(title)}</h1><div class="meta">${start ? 'Summary' : 'Lesson'} · SmartMedicineLM · ${new Date().toLocaleDateString()}</div>${holder.innerHTML}
+    <script>setTimeout(()=>print(),600)<\/script></body></html>`);
+  w.document.close();
+}
+
+/** Opens a new chat with the box ready for the learner's own explanation, graded on send. */
+export async function startExplainBack(concept) {
+  location.hash = '#/chat';
+  await new Promise((r) => setTimeout(r, 0));
+  startNewChat({ focus: false });
+  composer.explainBack = true;
+  els.input.value = `In my own words, ${concept}: `;
+  autosize();
+  els.input.focus();
+  els.input.setSelectionRange(els.input.value.length, els.input.value.length);
+  toast('Explain it as if teaching a classmate, then send it to be graded.', 'info', 4000);
 }

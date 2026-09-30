@@ -902,3 +902,56 @@ mark.hl-purple { --hl: #c3b3f288; }
 .lib-group { margin-bottom: 6px; }
 .lib-title { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--sm-muted); padding: 6px 8px 2px; }
 .lib-item { border-radius: 8px; font-size: .9rem; white-space: normal; }
+
+/* ---------- Today ---------- */
+.today-list { display: flex; flex-direction: column; gap: 10px; }
+.today-task { display: flex; gap: 12px; border: 1px solid var(--sm-rule); border-radius: 14px; padding: 12px 14px; background: var(--sm-paper); }
+.today-num { flex: 0 0 28px; height: 28px; border-radius: 50%; background: var(--sm-hema-soft); color: var(--sm-hema); font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.today-main { min-width: 0; flex: 1; }
+.today-title { font-weight: 700; margin-bottom: 2px; }
+.today-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+/* ---------- Notebook, search ---------- */
+.nb-tabs { margin-bottom: 14px; }
+.nb-actions { margin-bottom: 12px; }
+.nb-group { margin-bottom: 16px; }
+.nb-item { border: 1px solid var(--sm-rule); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; background: var(--sm-paper); }
+.nb-quote { border-left: 3px solid var(--sm-hema); margin: 0 0 6px; padding: 2px 0 2px 10px; font-size: .95rem; }
+.ink-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.search-hit { display: flex; flex-direction: column; gap: 2px; text-decoration: none; color: var(--sm-ink); border: 1px solid var(--sm-rule); border-radius: 12px; padding: 9px 12px; margin-bottom: 6px; }
+.search-hit:hover { border-color: var(--sm-hema); color: var(--sm-ink); }
+.search-hit span { font-size: .86rem; color: var(--sm-muted); }
+.search-hit mark { background: #ffd84d88; color: inherit; padding: 0 1px; border-radius: 2px; }
+
+/* ---------- Practice ---------- */
+.calc-answer { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.calc-answer .form-control { max-width: 180px; }
+.calc-unit { color: var(--sm-muted); font-size: .9rem; }
+.calc-steps { margin: 12px 0; padding-left: 1.2rem; }
+.calc-steps li { margin-bottom: 6px; }
+
+/* ---------- Knowledge map exercise ---------- */
+.map-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--sm-rule); }
+.map-row .map-fix { grid-column: 2; color: var(--sm-green); font-size: .78rem; }
+@media (max-width: 575.98px) { .map-row { grid-template-columns: 1fr; } .map-row .map-fix { grid-column: 1; } }
+
+/* ---------- Answers: section dial, sources view, cost, guideline check ---------- */
+.sec-dial { display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: middle; }
+.sec-dial button { border: 1px solid var(--sm-rule); background: var(--sm-paper); color: var(--sm-muted); border-radius: 999px; font-size: .68rem; font-weight: 600; padding: 1px 8px; font-family: var(--sm-font-ui); }
+.sec-dial button:hover { color: var(--sm-hema); border-color: var(--sm-hema); }
+.prose.src-view > p:not(:has(.cite)), .prose.src-view > ul > li:not(:has(.cite)), .prose.src-view > ol > li:not(:has(.cite)) { opacity: .38; }
+.prose.src-view .cite { outline: 2px solid var(--sm-green); border-radius: 4px; }
+.msg-act.on { color: var(--sm-hema); background: var(--sm-hema-soft); }
+.msg-actions .btn-icon.on { color: var(--sm-hema); }
+.msg-cost { margin-left: auto; align-self: center; font-size: .72rem; color: var(--sm-muted); padding-right: 4px; }
+.callout-check { border-color: color-mix(in srgb, var(--sm-amber) 45%, transparent); background: var(--sm-amber-soft); }
+.callout-check .callout-title { color: var(--sm-amber); }
+
+/* ---------- Chat tags, settings, scores ---------- */
+.chat-tags { display: inline-flex; gap: 4px; margin-left: 6px; }
+.chat-tags span { font-size: .66rem; color: var(--sm-hema); background: var(--sm-hema-soft); border-radius: 999px; padding: 0 6px; }
+.chat-item a { display: flex; align-items: center; min-width: 0; }
+.chat-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.price-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.price-row label { display: flex; flex-direction: column; gap: 4px; flex: 1 1 140px; }
+.score-chart { width: 100%; max-width: 420px; height: auto; color: var(--sm-muted); margin-bottom: 8px; }
