@@ -1,7 +1,8 @@
 /* Chat workspace: history, composer, retrieval → teaching controller → streaming render. */
 import { state, saveSettings, POLICY_TOGGLES } from './state.js';
 import { db } from './store.js';
-import { $, $$, uid, escapeHtml, toast, confirmDialog, promptDialog, downloadText, debounce } from './ui.js';
+import { $, $$, uid, escapeHtml, toast, confirmDialog, promptDialog, selectDialog, downloadText, debounce } from './ui.js';
+import { SYSTEMS } from './graph-seed.js';
 import { renderMessage, handleDiagramAction, extractConceptBlock } from './render.js';
 import { planFor, mergeLessonBlock, recordEvidence } from './knowledge-store.js';
 import { enableHighlighting } from './highlights.js';
@@ -108,6 +109,7 @@ export function initChat() {
 
   // thread delegation: citations, sources, diagrams, flashcards, copy, retry
   els.thread.addEventListener('click', onThreadClick);
+  document.addEventListener('chats:regroup', () => renderChatList());
   // Interactive diagrams: turn a tapped diagram box or chain step into a follow-up question.
   els.thread.addEventListener('diagram:node', (e) => prefill(`In the diagram above, explain "${e.detail.label}": what causes it, and what does it lead to?`));
   els.thread.addEventListener('chain:step', (e) =>
@@ -143,8 +145,27 @@ export async function loadChats() {
 const CHAT_PAGE = 60;
 let chatListLimit = CHAT_PAGE;
 
+/* ---------------- chat list: grouped by subject so it never becomes one long scroll ---------------- */
+const OTHER = 'Other topics';
+const GROUP_PAGE = 25;
+const subjectCache = new Map();
+const groupShowAll = new Set();
+
+/** The subject a chat belongs to: chosen by hand, or matched from its title. */
+export function subjectOf(chat) {
+  if (chat.subject) return chat.subject;
+  const key = `${chat.id}|${chat.title}`;
+  if (!subjectCache.has(key)) {
+    const title = String(chat.title || '').replace(/\s+—\s+.*$/, '');
+    const c = graph.match(title) || graph.find(title);
+    subjectCache.set(key, c?.system || OTHER);
+  }
+  return subjectCache.get(key);
+}
+
 export function renderChatList() {
   const q = els.search.value.trim().toLowerCase();
+  if (!q && !state.showArchived && state.settings.chatGrouping !== 'flat') return renderGroupedChats();
   if (q !== renderChatList.lastQuery) {
     chatListLimit = CHAT_PAGE;
     renderChatList.lastQuery = q;
@@ -164,22 +185,7 @@ export function renderChatList() {
   }
   const shown = chats.slice(0, chatListLimit);
   els.list.innerHTML = shown
-    .map(
-      (c) => `<li class="chat-item${c.id === state.currentChatId ? ' active' : ''}" data-id="${c.id}">
-      <a href="#/chat/${c.id}" title="${escapeHtml(c.title)}">${c.favorite ? '<i class="bi bi-star-fill"></i>' : ''}<span class="chat-title-text">${escapeHtml(c.title)}</span>${(c.tags || []).length ? `<span class="chat-tags">${c.tags.map((t) => `<span>#${escapeHtml(t)}</span>`).join('')}</span>` : ''}</a>
-      <div class="dropdown">
-        <button class="btn-icon" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Options for ${escapeHtml(c.title)}"><i class="bi bi-three-dots"></i></button>
-        <ul class="dropdown-menu dropdown-menu-end">
-          <li><button class="dropdown-item" data-act="rename">Rename</button></li>
-          <li><button class="dropdown-item" data-act="tags">Tags…</button></li>
-          <li><button class="dropdown-item" data-act="favorite">${c.favorite ? 'Remove from favourites' : 'Add to favourites'}</button></li>
-          <li><button class="dropdown-item" data-act="export">Export</button></li>
-          <li><button class="dropdown-item" data-act="archive">${c.archived ? 'Unarchive' : 'Archive'}</button></li>
-          <li><hr class="dropdown-divider"></li>
-          <li><button class="dropdown-item text-danger" data-act="delete">Delete</button></li>
-        </ul>
-      </div></li>`
-    )
+    .map(chatItemHtml)
     .join('');
   if (chats.length > shown.length)
     els.list.insertAdjacentHTML(
@@ -188,7 +194,71 @@ export function renderChatList() {
     );
 }
 
+function chatItemHtml(c) {
+  return `<li class="chat-item${c.id === state.currentChatId ? ' active' : ''}" data-id="${c.id}">
+      <a href="#/chat/${c.id}" title="${escapeHtml(c.title)}">${c.favorite ? '<i class="bi bi-star-fill"></i>' : ''}<span class="chat-title-text">${escapeHtml(c.title)}</span>${(c.tags || []).length ? `<span class="chat-tags">${c.tags.map((t) => `<span>#${escapeHtml(t)}</span>`).join('')}</span>` : ''}</a>
+      <div class="dropdown">
+        <button class="btn-icon" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Options for ${escapeHtml(c.title)}"><i class="bi bi-three-dots"></i></button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><button class="dropdown-item" data-act="rename">Rename</button></li>
+          <li><button class="dropdown-item" data-act="subject">Move to subject…</button></li>
+          <li><button class="dropdown-item" data-act="tags">Tags…</button></li>
+          <li><button class="dropdown-item" data-act="favorite">${c.favorite ? 'Remove from favourites' : 'Add to favourites'}</button></li>
+          <li><button class="dropdown-item" data-act="export">Export</button></li>
+          <li><button class="dropdown-item" data-act="archive">${c.archived ? 'Unarchive' : 'Archive'}</button></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><button class="dropdown-item text-danger" data-act="delete">Delete</button></li>
+        </ul>
+      </div></li>`;
+}
+
+function renderGroupedChats() {
+  const chats = state.chats.filter((c) => !c.archived).sort((a, b) => b.updatedAt - a.updatedAt);
+  if (!chats.length) {
+    els.list.innerHTML = `<li class="chat-list-empty">Your chats will appear here.</li>`;
+    return;
+  }
+  const groups = new Map();
+  const favourites = chats.filter((c) => c.favorite);
+  for (const c of chats) {
+    if (c.favorite) continue;
+    const g = subjectOf(c);
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(c);
+  }
+  // Most recently used subject first: what you are working on stays at the top.
+  const ordered = [...groups.entries()].sort((a, b) => b[1][0].updatedAt - a[1][0].updatedAt);
+  const saved = state.settings.chatGroupsOpen || {};
+  const current = state.currentChatId;
+  const isOpen = (name, list, i) => (name in saved ? saved[name] : list.some((c) => c.id === current) || (i === 0 && !favourites.some((c) => c.id === current)));
+  const section = (name, list, icon, i) => {
+    const open = isOpen(name, list, i);
+    const limit = groupShowAll.has(name) ? list.length : GROUP_PAGE;
+    return `<li class="chat-group"><button type="button" class="chat-group-head" data-group="${escapeHtml(name)}" aria-expanded="${open}">
+        <i class="bi ${open ? 'bi-chevron-down' : 'bi-chevron-right'}"></i><i class="bi ${icon}"></i><span class="label">${escapeHtml(name)}</span><span class="chat-group-count">${list.length}</span></button></li>
+      ${open ? list.slice(0, limit).map(chatItemHtml).join('') : ''}
+      ${open && list.length > limit ? `<li class="chat-more"><button type="button" class="btn btn-sm btn-link" data-group-all="${escapeHtml(name)}">Show all ${list.length}</button></li>` : ''}`;
+  };
+  els.list.innerHTML =
+    (favourites.length ? section('Favourites', favourites, 'bi-star', -1) : '') +
+    ordered.map(([name, list], i) => section(name, list, name === OTHER ? 'bi-folder' : 'bi-folder2', i)).join('');
+}
+
 function onChatListClick(e) {
+  const head = e.target.closest('[data-group]');
+  if (head) {
+    const name = head.dataset.group;
+    const open = head.getAttribute('aria-expanded') === 'true';
+    saveSettings({ chatGroupsOpen: { ...(state.settings.chatGroupsOpen || {}), [name]: !open } });
+    renderChatList();
+    return;
+  }
+  const all = e.target.closest('[data-group-all]');
+  if (all) {
+    groupShowAll.add(all.dataset.groupAll);
+    renderChatList();
+    return;
+  }
   if (e.target.closest('#moreChats')) {
     chatListLimit += CHAT_PAGE;
     renderChatList();
@@ -213,6 +283,11 @@ async function chatAction(action, chat) {
   if (action === 'rename') {
     const name = await promptDialog('Rename chat', chat.title, 'Chat name');
     if (name) await updateChat(chat, { title: name });
+  } else if (action === 'subject') {
+    const choice = await selectDialog('Move to subject', `Group "${chat.title}" under`, [['', 'Automatic (from the title)'], ...SYSTEMS.map((x) => [x, x]), [OTHER, OTHER]], chat.subject || '');
+    if (choice === null) return;
+    await updateChat(chat, { subject: choice || null }, false);
+    renderChatList();
   } else if (action === 'tags') {
     const raw = await promptDialog('Tags', (chat.tags || []).join(', '), 'Comma-separated, e.g. renal, step1, rotation');
     if (raw === null) return;

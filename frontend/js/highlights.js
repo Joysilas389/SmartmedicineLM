@@ -18,6 +18,7 @@ export const INKS = [
 const targets = new Map(); // container -> targetId
 let bar = null;
 let pending = null; // { target, start, end, text }
+let editing = false; // the bar is open for an existing highlight (opened by a tap)
 
 /* ---------------- offsets ---------------- */
 const walker = (root) => document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -125,7 +126,7 @@ function ensureBar() {
   bar = document.createElement('div');
   bar.className = 'hl-bar';
   bar.hidden = true;
-  bar.innerHTML = `<span class="hl-label"><i class="bi bi-highlighter"></i><span>Highlight</span></span>${INKS.map((i) => `<button type="button" class="hl-ink" data-ink="${i.key}" style="--ink:${i.color}" aria-label="Highlight ${i.label}"></button>`).join('')}
+  bar.innerHTML = `<span class="hl-label"><i class="bi bi-highlighter"></i><span class="hl-label-new">Highlight</span><span class="hl-label-edit">Change or erase</span></span>${INKS.map((i) => `<button type="button" class="hl-ink" data-ink="${i.key}" style="--ink:${i.color}" aria-label="Highlight ${i.label}"></button>`).join('')}
     <span class="hl-sep"></span>
     <button type="button" class="hl-ink hl-eraser" data-ink="erase" aria-label="Erase highlight"><i class="bi bi-eraser"></i></button>
     <button type="button" class="hl-ink hl-eraser" data-ink="bookmark" aria-label="Bookmark this passage"><i class="bi bi-bookmark-plus"></i></button>`;
@@ -181,9 +182,20 @@ function showBar(rect) {
 }
 
 function hideBar() {
-  if (bar) bar.hidden = true;
+  if (bar) {
+    bar.hidden = true;
+    bar.classList.remove('editing');
+  }
   pending = null;
+  editing = false;
 }
+
+// Tapping anywhere outside the palette (and outside a highlight) closes it without changes.
+document.addEventListener('pointerdown', (e) => {
+  if (!editing || !bar || bar.hidden) return;
+  if (e.target.closest('.hl-bar') || e.target.closest('mark.hl')) return;
+  hideBar();
+});
 
 /* ---------------- public API ---------------- */
 /** Makes `root` highlightable. `target` identifies what is being read (a message or page). */
@@ -196,18 +208,25 @@ export async function enableHighlighting(root, target) {
   } catch (err) {
     console.warn('Could not load highlights', err);
   }
-  // Tap an existing highlight to remove it.
+  // Tap an existing highlight to open the palette for it: recolour it or erase it
+  // deliberately. A stray tap no longer deletes anything.
   root.addEventListener('click', async (e) => {
     const mark = e.target.closest('mark.hl');
     if (!mark || !getSelection().isCollapsed) return;
-    const id = mark.dataset.hlId;
-    unpaint(root, id);
-    await db.del('highlights', id);
+    const h = (await load(target)).find((x) => x.id === mark.dataset.hlId);
+    if (!h) return;
+    pending = { root, target, start: h.start, end: h.end, text: h.text };
+    editing = true;
+    showBar(mark.getBoundingClientRect());
+    bar.classList.add('editing');
   });
 }
 
 function onSelectionChange() {
   const sel = getSelection();
+  if (editing && (!sel || sel.isCollapsed)) return; // opened by tapping a highlight
+  editing = false;
+  bar?.classList.remove('editing');
   if (!sel || sel.isCollapsed || !sel.rangeCount) return hideBar();
   const range = sel.getRangeAt(0);
   const root = [...targets.keys()].find((r) => r.contains(range.commonAncestorContainer));

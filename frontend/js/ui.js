@@ -119,3 +119,17 @@ export function debounce(fn, ms = 200) {
     t = setTimeout(() => fn(...args), ms);
   };
 }
+
+/** A dialog with one drop-down. Resolves to the chosen value, or null if cancelled. */
+export function selectDialog(title, label, options, value = '') {
+  return openDialog({
+    title,
+    bodyHtml: `<label class="form-label" for="dlgSelect">${escapeHtml(label)}</label><select class="form-select" id="dlgSelect">${options
+      .map(([v, l]) => `<option value="${escapeHtml(v)}" ${v === value ? 'selected' : ''}>${escapeHtml(l)}</option>`)
+      .join('')}</select>`,
+    okText: 'Save',
+    okClass: 'btn-primary',
+    onOpen: () => document.getElementById('dlgSelect').focus(),
+    collect: () => document.getElementById('dlgSelect').value,
+  });
+}

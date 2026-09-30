@@ -113,6 +113,7 @@ export function renderSettings() {
 
     <section class="settings-section">
       <h3>Appearance</h3>
+      ${row('setGroupChats', 'Group chats by subject', 'Files chat history into collapsible subjects (Cardiovascular, Renal…) so the list stays short. Use "Move to subject…" in a chat\'s menu to change where one is filed.', toggle('setGroupChats', s.chatGrouping !== 'flat'))}
       ${row('setTheme', 'Theme', '', select('setTheme', s.theme, [['auto', 'Match device'], ['light', 'Light'], ['dark', 'Dark']]))}
     </section>
 
@@ -151,6 +152,10 @@ export function renderSettings() {
   on('setSched', 'change', (e) => saveSettings({ scheduler: e.target.value }));
   on('setLevel', 'change', (e) => saveSettings({ level: e.target.value }));
   on('setRotation', 'change', (e) => saveSettings({ rotation: e.target.value }));
+  on('setGroupChats', 'change', (e) => {
+    saveSettings({ chatGrouping: e.target.checked ? 'grouped' : 'flat' });
+    document.dispatchEvent(new CustomEvent('chats:regroup'));
+  });
   on('setShowCost', 'change', (e) => saveSettings({ showCost: e.target.checked }));
   const savePrices = () => {
     const input = Number(document.getElementById('setPriceIn').value.replace(',', '.'));
