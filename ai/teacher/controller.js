@@ -86,9 +86,24 @@ const TOKEN_BUDGET = {
   continue: { quick: 8000, standard: 8000, deep: 12000, comprehensive: 16000 },
 };
 
-export function maxTokensFor(mode, depth) {
+export function maxTokensFor(mode, depth, boost = 1) {
   const d = DEPTHS.includes(depth) ? depth : 'standard';
-  return (TOKEN_BUDGET[mode] || TOKEN_BUDGET.standard)[d];
+  let budget = (TOKEN_BUDGET[mode] || TOKEN_BUDGET.standard)[d];
+  // Newer models may spend part of the output budget reasoning before they write, so an
+  // explanatory answer is never given less than this much room (unused tokens cost nothing).
+  if (!['concise', 'recall', 'image_quiz', 'continue'].includes(mode)) budget = Math.max(budget, 4000);
+  return Math.min(32000, Math.round(budget * Math.min(Math.max(Number(boost) || 1, 1), 4)));
+}
+
+/** "in detail", "everything about", "full guideline"… ask for more depth than the default. */
+export function depthFromText(text = '', depth = 'standard') {
+  const t = String(text).toLowerCase();
+  const order = ['quick', 'standard', 'deep', 'comprehensive'];
+  let want = null;
+  if (/\b(comprehensive(ly)?|everything (about|on)|exhaustive|full (guideline|guidance|review)|whole guideline|all the recommendations)\b/.test(t)) want = 'comprehensive';
+  else if (/\b(in (great |full |more )?detail|detailed|thorough(ly)?|in depth|in-depth|step by step|guidelines?|guidance)\b/.test(t)) want = 'deep';
+  if (!want) return depth;
+  return order.indexOf(want) > order.indexOf(depth) ? want : depth;
 }
 
 function modeInstructions(mode, depth, policy, imageKind = 'auto', exam = 'step1') {
@@ -204,7 +219,7 @@ export function buildTeachingRequest(body = {}) {
   const last = messages[messages.length - 1] || { content: '' };
   const hasImages = Boolean(last.images?.length);
 
-  const depth = DEPTHS.includes(controls.depth) ? controls.depth : 'standard';
+  const depth = depthFromText(last?.content || '', DEPTHS.includes(controls.depth) ? controls.depth : 'standard');
   const knowledgeMode = KNOWLEDGE_MODES.includes(controls.knowledgeMode) ? controls.knowledgeMode : 'hybrid';
   const exam = M.examOf(controls.exam);
   const mode = resolveMode(controls, last.content, hasImages);
@@ -268,7 +283,7 @@ export function buildTeachingRequest(body = {}) {
   return {
     system: parts.join('\n\n'),
     messages,
-    maxTokens: maxTokensFor(mode, depth),
+    maxTokens: maxTokensFor(mode, depth, controls.budgetBoost),
     temperature,
     mode,
     depth,
@@ -293,7 +308,7 @@ export function sanitizeMessages(raw) {
   for (const m of list) {
     const role = m?.role === 'assistant' ? 'assistant' : 'user';
     let content = String(m?.content ?? '')
-      .replace(/\n*\[\[SM:TRUNCATED\]\]\s*$/, '')
+      .replace(/\n*\[\[SM:(TRUNCATED|EMPTY|REFUSED)\]\]\s*$/, '')
       .replace(/\n*> \[!NOTE\]\n> This answer reached the length limit\.[^\n]*\s*$/, '');
     // Keep the END of long answers: a "continue" request needs to see where it stopped.
     const cap = role === 'assistant' ? 60000 : 24000;

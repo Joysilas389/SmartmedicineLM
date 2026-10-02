@@ -1,4 +1,4 @@
-import { ProviderError, sseToText, streamToString, postWithFallback, TRUNCATION_MARK } from './base.js';
+import { ProviderError, sseToText, streamToString, postWithFallback, TRUNCATION_MARK, EMPTY_MARK, REFUSAL_MARK } from './base.js';
 
 export function createAnthropicProvider(env) {
   const apiKey = env.ANTHROPIC_API_KEY;
@@ -28,10 +28,18 @@ export function createAnthropicProvider(env) {
       { model, system, max_tokens: maxTokens, temperature, stream: true, messages: toAnthropic(messages) },
       'Anthropic',
     );
+    let wroteText = false;
     return sseToText(res.body, (evt) => {
-      if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') return evt.delta.text;
-      if (evt.type === 'message_delta' && evt.delta?.stop_reason === 'max_tokens')
-        return TRUNCATION_MARK;
+      if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
+        if (evt.delta.text) wroteText = true;
+        return evt.delta.text;
+      }
+      if (evt.type === 'message_delta') {
+        const reason = evt.delta?.stop_reason;
+        // Out of room: partway through (Continue makes sense) or before writing anything (retry with more room).
+        if (reason === 'max_tokens' || reason === 'model_context_window_exceeded') return wroteText ? TRUNCATION_MARK : EMPTY_MARK;
+        if (reason === 'refusal') return wroteText ? `\n\n${REFUSAL_MARK}` : REFUSAL_MARK;
+      }
       if (evt.type === 'error') return `\n\n⚠️ Model error: ${evt.error?.message || 'unknown error'}`;
       return '';
     });

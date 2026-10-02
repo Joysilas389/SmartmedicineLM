@@ -597,52 +597,73 @@ async function runAssistant(chat, userMsg, images, pinned) {
     if (stick) scrollToBottom();
   };
 
-  try {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', ...(s.accessCode ? { 'x-access-code': s.accessCode } : {}) },
-      body: JSON.stringify(payload),
-      signal: ac.signal,
-    });
-    if (!res.ok) {
-      let msg = `The request failed (${res.status}).`;
-      try {
-        const j = await res.json();
-        msg = j.error || msg;
-        if (j.code === 'ACCESS_CODE') msg += ' Open Settings to add it.';
-        if (j.code === 'LOGIN') document.dispatchEvent(new CustomEvent('account:signedout'));
-      } catch { /* not JSON */ }
-      throw new Error(msg);
-    }
-    aiMsg.mode = res.headers.get('x-teaching-mode') || '';
-    aiMsg.depth = res.headers.get('x-teaching-depth') || '';
-    if (res.headers.get('x-source-locked')) sources = [];
-    setModeTag(node, aiMsg.mode);
+  // One automatic retry when the model used its whole budget before writing anything
+  // (typically on reasoning). "Continue" would have nothing to continue in that case.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(s.accessCode ? { 'x-access-code': s.accessCode } : {}) },
+        body: JSON.stringify(payload),
+        signal: ac.signal,
+      });
+      if (!res.ok) {
+        let msg = `The request failed (${res.status}).`;
+        try {
+          const j = await res.json();
+          msg = j.error || msg;
+          if (j.code === 'ACCESS_CODE') msg += ' Open Settings to add it.';
+          if (j.code === 'LOGIN') document.dispatchEvent(new CustomEvent('account:signedout'));
+        } catch { /* not JSON */ }
+        throw new Error(msg);
+      }
+      aiMsg.mode = res.headers.get('x-teaching-mode') || '';
+      aiMsg.depth = res.headers.get('x-teaching-depth') || '';
+      if (res.headers.get('x-source-locked')) sources = [];
+      setModeTag(node, aiMsg.mode);
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      text += decoder.decode(value, { stream: true });
-      if (!renderTimer)
-        renderTimer = setTimeout(async () => {
-          renderTimer = null;
-          await paint(false);
-        }, 70);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        text += decoder.decode(value, { stream: true });
+        if (!renderTimer)
+          renderTimer = setTimeout(async () => {
+            renderTimer = null;
+            await paint(false);
+          }, 70);
+      }
+      text += decoder.decode();
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        text += text ? '\n\n*Stopped.*' : '*Stopped before a response arrived.*';
+      } else {
+        aiMsg.error = err.message || 'Something went wrong.';
+      }
+    } finally {
+      clearTimeout(renderTimer);
+      state.streaming = null;
+      setSending(false);
     }
-    text += decoder.decode();
-  } catch (err) {
-    if (err.name === 'AbortError') {
-      text += text ? '\n\n*Stopped.*' : '*Stopped before a response arrived.*';
-    } else {
-      aiMsg.error = err.message || 'Something went wrong.';
-    }
-  } finally {
-    clearTimeout(renderTimer);
-    state.streaming = null;
-    setSending(false);
+    const onlyEmpty = /\[\[SM:EMPTY\]\]/.test(text) && !text.replace(/\[\[SM:[A-Z]+\]\]/g, '').trim();
+    if (!onlyEmpty || attempt === 2 || ac.signal.aborted) break;
+    payload.controls.budgetBoost = 2.5;
+    text = '';
+    body.innerHTML = `<p class="text-body-secondary small"><span class="spinner-border spinner-border-sm me-2"></span>That needed more room than the first attempt allowed. Retrying with a larger answer budget…</p>`;
+    state.streaming = ac;
+    setSending(true);
   }
+
+  if (/\[\[SM:EMPTY\]\]/.test(text) && !text.replace(/\[\[SM:[A-Z]+\]\]/g, '').trim()) {
+    text = '';
+    aiMsg.error = 'The model used its whole length budget before writing anything, even after a retry with more room. Try asking for one part at a time (for example "the recommendations on mode of delivery"), or set Depth to Comprehensive in Settings.';
+  }
+  if (/^\s*\[\[SM:REFUSED\]\]\s*$/.test(text)) {
+    text = '';
+    aiMsg.error = 'The model declined to answer this request. Rephrasing it as an educational question usually helps.';
+  }
+  text = text.replace(/\n*\[\[SM:REFUSED\]\]/g, '\n\n> [!NOTE]\n> The model stopped here because it declined to continue.');
 
   aiMsg.content = text;
   if (aiMsg.error && !text) {

@@ -66,7 +66,7 @@ const SPECIAL_BLOCKS = ['mermaid', 'chain', 'flashcards', 'concepts'];
 export function prepareText(raw = '') {
   let text = String(raw);
   const truncated = TRUNC_RE.test(text) || text.includes('[[SM:TRUNCATED]]');
-  text = text.replace(TRUNC_RE, '').replace(/\[\[SM:TRUNCATED\]\]/g, '');
+  text = text.replace(TRUNC_RE, '').replace(/\[\[SM:(TRUNCATED|EMPTY|REFUSED)\]\]/g, '');
   let cutBlock = null;
   if (truncated) {
     const fences = [...text.matchAll(/^ {0,3}```([\w-]*)/gm)];

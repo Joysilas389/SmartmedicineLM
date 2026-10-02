@@ -69,6 +69,11 @@ export async function streamToString(stream) {
 
 /** Appended to a stream when the model hit its output limit; the client renders it as a Continue prompt. */
 export const TRUNCATION_MARK = '\n\n[[SM:TRUNCATED]]';
+/** The length limit was reached before ANY visible text: usually the budget went on the model's
+ *  internal reasoning. Distinct from TRUNCATION_MARK so the app retries instead of offering "Continue". */
+export const EMPTY_MARK = '[[SM:EMPTY]]';
+/** The model declined to answer. */
+export const REFUSAL_MARK = '[[SM:REFUSED]]';
 
 export async function upstreamError(res, providerName) {
   let text = '';

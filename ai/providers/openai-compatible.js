@@ -1,4 +1,4 @@
-import { ProviderError, sseToText, streamToString, upstreamError, postWithFallback, TRUNCATION_MARK } from './base.js';
+import { ProviderError, sseToText, streamToString, upstreamError, postWithFallback, TRUNCATION_MARK, EMPTY_MARK, REFUSAL_MARK } from './base.js';
 
 /**
  * Works with any OpenAI-compatible Chat Completions API:
@@ -42,12 +42,14 @@ export function createOpenAICompatibleProvider(env) {
       { model, stream: true, temperature, max_tokens: maxTokens, messages: toOpenAI(system, messages) },
       'Model API',
     );
+    let wroteText = false;
     return sseToText(res.body, (evt) => {
       if (evt.error) return `\n\n⚠️ Model error: ${evt.error.message || 'unknown error'}`;
       const choice = evt.choices?.[0];
       let text = choice?.delta?.content || '';
-      if (choice?.finish_reason === 'length')
-        text += TRUNCATION_MARK;
+      if (text) wroteText = true;
+      if (choice?.finish_reason === 'length') text += wroteText ? TRUNCATION_MARK : EMPTY_MARK;
+      if (choice?.finish_reason === 'content_filter') text += wroteText ? `\n\n${REFUSAL_MARK}` : REFUSAL_MARK;
       return text;
     });
   }
